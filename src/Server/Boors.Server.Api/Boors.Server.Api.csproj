@@ -108,6 +108,7 @@
     <ItemGroup>
         <Content Include="..\..\..\Bit.ResxTranslator.json" Link="Features\Identity\Resources\Bit.ResxTranslator.json" />
         <ProjectReference Include="..\Boors.Server.Shared\Boors.Server.Shared.csproj" />
+        <ProjectReference Include="..\..\Market\Boors.Market\Boors.Market.csproj" />
     </ItemGroup>
 
     <ItemGroup>

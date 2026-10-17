@@ -10,6 +10,8 @@
         <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
         <PackageReference Include="DNTPersianUtils.Core" />
         <PackageReference Include="YamlDotNet" />
+        <PackageReference Include="DuckDB.NET.Data.Full" />
+        <PackageReference Include="Jint" />
     </ItemGroup>
 
     <ItemGroup>

@@ -3,6 +3,8 @@ using Boors.Shared.Features.PushNotification;
 using Boors.Shared.Features.Chatbot;
 using Boors.Shared.Infrastructure.Dtos.SignalR;
 using Boors.Shared.Features.Statistics;
+using Boors.Shared.Features.MarketData;
+using Boors.Shared.Features.Market;
 using Boors.Shared.Features.Diagnostic;
 using Boors.Shared.Features.Identity.OAuth.Dtos;
 using Boors.Shared.Features.Tenants.Dtos;
@@ -37,6 +39,22 @@ namespace Boors.Shared.Infrastructure.Dtos;
 [JsonSerializable(typeof(IAsyncEnumerable<string>))] // DiagnosticController.PerformDiagnostic
 [JsonSerializable(typeof(GitHubStats))]
 [JsonSerializable(typeof(NugetStatsDto))]
+[JsonSerializable(typeof(MarketDataHealthDto))]
+[JsonSerializable(typeof(MarketOverviewDto))]
+[JsonSerializable(typeof(List<BreadthDayDto>))]
+[JsonSerializable(typeof(List<SectorPerformanceDto>))]
+[JsonSerializable(typeof(List<MoverDto>))]
+[JsonSerializable(typeof(List<ScreenRowDto>))]
+[JsonSerializable(typeof(List<InstrumentSearchResultDto>))]
+[JsonSerializable(typeof(MarketWatchRequestDto))]
+[JsonSerializable(typeof(MarketWatchResultDto))]
+[JsonSerializable(typeof(InstrumentMetricsDto))]
+[JsonSerializable(typeof(List<BarDto>))]
+[JsonSerializable(typeof(List<FlowDayDto>))]
+[JsonSerializable(typeof(List<CorporateEventDto>))]
+[JsonSerializable(typeof(List<ShareholderDto>))]
+[JsonSerializable(typeof(List<CodalLetterDto>))]
+[JsonSerializable(typeof(List<SupervisorMessageDto>))]
 [JsonSerializable(typeof(AppProblemDetails))]
 [JsonSerializable(typeof(HealthReportDto))]
 [JsonSerializable(typeof(DeploymentConfigurationDto))]

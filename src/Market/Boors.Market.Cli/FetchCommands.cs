@@ -141,13 +141,13 @@ public sealed class FetchCommands(TsetmcClient tsetmc, CodalClient codal, Market
         var sellQueues = snapshot.Rows.Where(r => r.BestLimits.FirstOrDefault() is { } l && r.AllowedLow > 0 && l.AskPrice == r.AllowedLow && l.BidVolume == 0).ToList();
 
         Console.WriteLine($"Instruments: {snapshot.Rows.Count}, traded today: {traded.Count}");
-        Console.WriteLine($"Buy queues: {buyQueues.Count} ({buyQueues.Sum(r => r.BestLimits[0].BidVolume * r.BestLimits[0].BidPrice) / 10_000_000_000m:0.##} hemat), sell queues: {sellQueues.Count} ({sellQueues.Sum(r => r.BestLimits[0].AskVolume * r.BestLimits[0].AskPrice) / 10_000_000_000m:0.##} hemat)");
+        Console.WriteLine($"Buy queues: {buyQueues.Count} ({buyQueues.Sum(r => r.BestLimits[0].BidVolume * r.BestLimits[0].BidPrice) / 10_000_000_000_000m:0.##} hemat), sell queues: {sellQueues.Count} ({sellQueues.Sum(r => r.BestLimits[0].AskVolume * r.BestLimits[0].AskPrice) / 10_000_000_000_000m:0.##} hemat)");
         Console.WriteLine($"Max hEven (for incremental polling): {snapshot.MaxHEven}");
         Console.WriteLine();
-        Output.Table(["class (by ISIN)", "traded", "value (hemat = 10^10 rial)"], traded
+        Output.Table(["class (by ISIN)", "traded", "value (hemat = 10^13 rial)"], traded
             .GroupBy(r => r.Class)
             .OrderByDescending(g => g.Sum(r => r.Value))
-            .Select(g => (IReadOnlyList<object?>)[g.Key.ToRuleKey(), g.Count(), Math.Round(g.Sum(r => r.Value) / 10_000_000_000m, 1)]));
+            .Select(g => (IReadOnlyList<object?>)[g.Key.ToRuleKey(), g.Count(), Math.Round(g.Sum(r => r.Value) / 10_000_000_000_000m, 2)]));
         Console.WriteLine();
         Output.Table(["symbol", "class", "close", "change %", "value (B rial)", "trades"], traded
             .Where(r => r.Class is InstrumentClass.TseStock or InstrumentClass.IfbStock or InstrumentClass.Rights)

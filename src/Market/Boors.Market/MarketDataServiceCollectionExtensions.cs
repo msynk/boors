@@ -1,8 +1,12 @@
 using System.Net;
 using System.Threading.RateLimiting;
 using Boors.Market.RawCache;
+using Boors.Market.Ingestion;
 using Boors.Market.Rules;
+using Boors.Market.Storage;
 using Boors.Market.Sources.Codal;
+using Boors.Market.Sources.Funds;
+using Boors.Market.Sources.Macro;
 using Boors.Market.Sources.Tsetmc;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
@@ -37,23 +41,36 @@ public static class MarketDataServiceCollectionExtensions
             return string.IsNullOrWhiteSpace(path) ? MarketRules.LoadDefault() : MarketRules.LoadFile(path);
         });
 
-        services.AddHttpClient<TsetmcClient>(ConfigureBrowserLikeClient)
-            .ConfigurePrimaryHttpMessageHandler(CreateHandler)
-            .AddResilienceHandler("tsetmc", (builder, context) =>
-            {
-                var options = context.ServiceProvider.GetRequiredService<IOptions<MarketDataOptions>>().Value;
-                ConfigurePipeline(builder, options, options.TsetmcRequestsPerSecond);
-            });
+        // The store is a single DuckDB file per node; one instance per process (DuckDB allows one writing process).
+        services.TryAddSingleton(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<MarketDataOptions>>().Value;
+            return MarketStore.Open(options.StorePath ?? Path.Combine(options.DataRoot, "market.duckdb"));
+        });
+        services.TryAddTransient<MarketCollector>();
+        services.TryAddTransient<DataHealthService>();
+        services.TryAddTransient<Contracts.SourceContracts>();
+        services.TryAddTransient<Analytics.MarketAnalytics>();
+        services.TryAddTransient<Analytics.MarketWatchService>();
 
-        services.AddHttpClient<CodalClient>(ConfigureBrowserLikeClient)
-            .ConfigurePrimaryHttpMessageHandler(CreateHandler)
-            .AddResilienceHandler("codal", (builder, context) =>
-            {
-                var options = context.ServiceProvider.GetRequiredService<IOptions<MarketDataOptions>>().Value;
-                ConfigurePipeline(builder, options, options.CodalRequestsPerSecond);
-            });
+        AddSourceClient<TsetmcClient>(services, "tsetmc", o => o.TsetmcRequestsPerSecond);
+        AddSourceClient<CodalClient>(services, "codal", o => o.CodalRequestsPerSecond);
+        AddSourceClient<TgjuClient>(services, "tgju", o => o.OtherSourcesRequestsPerSecond);
+        AddSourceClient<FipiranClient>(services, "fipiran", o => o.OtherSourcesRequestsPerSecond);
 
         return services;
+    }
+
+    private static void AddSourceClient<TClient>(IServiceCollection services, string name, Func<MarketDataOptions, double> requestsPerSecond)
+        where TClient : class
+    {
+        services.AddHttpClient<TClient>(ConfigureBrowserLikeClient)
+            .ConfigurePrimaryHttpMessageHandler(CreateHandler)
+            .AddResilienceHandler(name, (builder, context) =>
+            {
+                var options = context.ServiceProvider.GetRequiredService<IOptions<MarketDataOptions>>().Value;
+                ConfigurePipeline(builder, options, requestsPerSecond(options));
+            });
     }
 
     private static void ConfigureBrowserLikeClient(IServiceProvider services, HttpClient client)
@@ -75,9 +92,11 @@ public static class MarketDataServiceCollectionExtensions
         PooledConnectionLifetime = TimeSpan.FromMinutes(5),
     };
 
-    private static void ConfigurePipeline(ResiliencePipelineBuilder<HttpResponseMessage> builder, MarketDataOptions options, int requestsPerSecond)
+    private static void ConfigurePipeline(ResiliencePipelineBuilder<HttpResponseMessage> builder, MarketDataOptions options, double requestsPerSecond)
     {
-        var permits = Math.Max(1, requestsPerSecond);
+        // Rates below 1/s become one permit per (1 / rate) seconds; rates above 1/s become N permits per second.
+        var permits = requestsPerSecond >= 1 ? (int)Math.Round(requestsPerSecond) : 1;
+        var period = requestsPerSecond >= 1 ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(1 / Math.Max(requestsPerSecond, 0.01));
 
         builder
             .AddTimeout(options.TotalTimeout)
@@ -103,7 +122,7 @@ public static class MarketDataServiceCollectionExtensions
             {
                 TokenLimit = permits,
                 TokensPerPeriod = permits,
-                ReplenishmentPeriod = TimeSpan.FromSeconds(1),
+                ReplenishmentPeriod = period,
                 QueueLimit = 100_000,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true,

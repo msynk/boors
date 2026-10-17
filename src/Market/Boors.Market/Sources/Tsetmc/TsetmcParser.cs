@@ -26,7 +26,7 @@ public sealed record MarketWatchSnapshot(IReadOnlyList<MarketWatchRow> Rows)
 }
 
 /// <summary>Pure functions from TSETMC JSON bodies to domain records. No I/O; safe to replay over the raw cache.</summary>
-public static class TsetmcParser
+public static partial class TsetmcParser
 {
     public static IReadOnlyList<DailyBar> ParseDailyHistory(ReadOnlySpan<byte> json, long insCode)
     {
@@ -256,6 +256,9 @@ public static class TsetmcParser
                 PriceEarnings = d.Pe,
                 VisitCount = d.Vc,
                 HEven = d.HEven,
+                YVal = d.YVal,
+                Flow = d.Flow,
+                Board = d.CGrValCot?.Trim(),
                 LastTradeTime = DEven.ToTime(d.HEven),
                 BestLimits = (d.BlDs ?? [])
                     .Select(l => new BestLimitLevel

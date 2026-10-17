@@ -1,6 +1,6 @@
 # Boors — Iran Stock Market Analysis App: Development Plan
 
-Version 2.1 · 2026-10-17 (25 Mehr 1405) — v2.1 records Phase 0 implementation results (§5.2, §5.3, §3.6, §3.8, §6.3, §9.1)
+Version 2.3 · 2026-10-17 (25 Mehr 1405) — v2.1 recorded Phase 0; v2.2 Phase 1 (DuckDB market store §4, findings §9.4, status §9.2); v2.3 closes Phase 1 and records the Phase 2 backend (§9.3)
 Supersedes v1.0 (same day). Basis:
 - Round 1: [reports/Iran stock market app feasibility.md](../reports/Iran%20stock%20market%20app%20feasibility.md)
 - Round 2: [reports/Iran stock app plan round 2.md](../reports/Iran%20stock%20app%20plan%20round%202.md) (stack verification, Iran infrastructure, field-level data specs, UX benchmark, Mehr 1405 rules)
@@ -268,7 +268,17 @@ Source: TSETMC official help (old.tsetmc.com `ParTree=151715`, `LnkIdn` 3196–3
 
 ## 4. Data model (core)
 
-PostgreSQL 18 with TimescaleDB Community (Tiger Data, Timescale License — permitted for Boors as a "value-added product" as long as tenants never get schema or raw SQL access) holds operational and serving data. Parquet on MinIO holds the raw cache and research exports. DuckDB runs heavy analytics and backtests over Parquet.
+**Changed in P1.** Market data lives in an **embedded DuckDB file per node** (`{DataRoot}/market.duckdb`, `Boors.Market.Storage.MarketStore`), not in PostgreSQL/TimescaleDB. PostgreSQL 18 remains the app database: identity, tenants, watchlists, alerts and Hangfire jobs, via the template's `AppDbContext`.
+
+Reasons:
+- The same engine runs on the Iran node, the abroad node and the offline desktop copy (P7), with no server to operate.
+- The store is a rebuildable projection of the raw cache (`boors rebuild` reconstructs it in seconds), so it needs no replication: nodes exchange raw-cache bundles instead.
+- At this volume (about 15 million daily rows when complete), columnar DuckDB answers analytical queries faster than a row store, and the Timescale licence caveats go away.
+- It can be tested without Docker.
+
+The cost: one writing process per file (collection jobs run one at a time per node), and multi-user serving at scale would need a read replica or Postgres later. That is acceptable for a personal-first app and can be revisited in P9.
+
+The tables below are the DuckDB schema as implemented (schema version 2, `MarketStoreSchema.cs`); the user/app tables stay in Postgres.
 
 | Table | Key | Notes |
 |---|---|---|
@@ -377,9 +387,11 @@ Offline sync, checked in P0 at the code level: the client keeps an EF Core SQLit
 | Statistics | MathNet.Numerics | current | MIT |
 | Excel/HTML | ExcelDataReader / ClosedXML; AngleSharp | current | — |
 | Persian utilities | DNTPersianUtils.Core | 7.0.2 | Apache-2.0 |
-| DB | PostgreSQL 18 + TimescaleDB Community | 18.6 / TSL | Timescale License: fine for a value-added app; no DBaaS; tenants never get schema access |
+| DB (app) | PostgreSQL 18 (template `AppDbContext`) | 18.6 | Identity, tenants, user data, Hangfire storage. TimescaleDB dropped in P1 (market data moved to DuckDB, see §4) |
+| DB (market data) | DuckDB via DuckDB.NET.Data.Full | 1.5.6.1 | MIT; one file per node; rebuildable from the raw cache |
 | ORM | EF Core 10 + Npgsql | Npgsql EF 10.0.3 | JSON complex types, LeftJoin, named query filters |
 | Analytics engine | DuckDB.NET.Data.Full + Parquet.Net | 1.5.6.1 / 6.1.0 | MIT |
+| Filter language | **Jint** (JavaScript interpreter) | 4.17.0 | BSD-2-Clause. Added in P2: TSETMC filters are JavaScript, so an embedded, sandboxed interpreter gives exact compatibility, including code mode |
 | Cache / pub-sub | Redis (in-process cache while single-node) | — | — |
 | ML serving | Microsoft.ML.OnnxRuntime | 1.31.0 | Supports LightGBM graphs. **ML.NET stays out of the critical path** (6.0 previews only) |
 | LLM abstraction | Microsoft.Extensions.AI `IChatClient` | 10.10.x | OllamaSharp 5.4.25 as local provider; Microsoft Agent Framework 1.x (GA Apr 2026) only if multi-step agents are needed; Semantic Kernel legacy |
@@ -580,6 +592,58 @@ Durations assume **one full-time developer**; multiply by about 2 for part-time.
 | 6 | Codal taxonomy + one ن-۳۰ `datasource` | **Done.** Taxonomy parsed; the datasource spike succeeded and is saved as a P4 golden file; table codes corrected in §3.6. |
 | 7 | Deploy the collector to both nodes; reachability | **Partly done.** Probe from the dev machine: all 10 market-data sources OK; Telegram reachable (so this machine is not behind Iran's filter); Bale and AvalAI reachable. Needs the Iran and abroad nodes to exist. |
 
+### 9.2 Phase 1 status (2026-10-17)
+
+| Deliverable | Status |
+|---|---|
+| EOD collectors | **Done**, in `Boors.Market.Ingestion.MarketCollector`. Jobs: instruments (market watch + fipiran fund types + GetInstrumentInfo details), indices (57 TSE + IFB index list, history of 7 main indices), backfill (history, flows, published and implied adjustments, share changes; optional supervisor messages), end of day (3 bulk calls: market watch, same-day flows, index snapshots), funds, macro (tgju: USD, coin, 18k gold, ounce, EUR), Codal letters, supervisor messages, halt resolution. Exchange Centre rate and CPI come in through `boors import macro <csv>` (no machine-readable source). |
+| Parsers | **Done** for every endpoint above; all tolerate the shapes seen live (e.g. `instrumentState: []`, fipiran's `0001-01-01` dates). |
+| Schema | **Done**, as a DuckDB store (see §4); idempotent merges with precedence rules (history beats market watch; official flows beat estimated flows; class source fund > yVal > ISIN). |
+| `day_status` + `halt_reason` | **Done.** Halts are resolved by asking `GetInstrumentState` for the first day of each zero-trade run; the reason comes from the nearest supervisor message (disclosure, general meeting, supervisory, underlying). Reasons stay "Unknown" where the message archive does not reach. |
+| Closure calendar | **Done:** rules.yaml closures plus days where TEDPIX repeated its close (106 days recorded). |
+| PIT adjustment | **Done, with a change of method** (§9.4): returns are `Close / Yesterday − 1`, and adjusted series use factors implied by the bars. Verified on فولاد: compounding returns reproduces the adjusted path within 0.034% over 19 years. |
+| Contract tests | **Done:** `boors verify contracts` checks 19 endpoints against `Contracts/baseline.json`, with known-optional fields and re-sampling. |
+| Data-health page | **Backend done:** `DataHealthService`, the `boors health` CLI, `GET api/v1/MarketData/GetHealth` (Operations_View policy), a `marketData` health check, and `POST RunJob/{job}`. The Blazor page itself moves to P2, when the bit MCP tools are available. |
+| Raw-cache sync | **Done:** `boors cache export/import` bundles (a union import; latest-pointers only move forward). |
+| Server integration | **Done, compile-verified only** (no local Postgres/Docker to run the server): services registered in `Program.Services.cs`; Hangfire schedules in Iran time when `MarketData:Collect` is true (instruments 07:30, EOD 13:35 and 18:35 Sat–Wed, messages every 30 min, Codal every 15 min, macro 4×/day, funds 20:00, indices 01:15, backfill 02:00, halts 03:00). |
+| Exit criteria | Unattended rebuild: **yes** (`boors rebuild`, cache-only; 352 instruments in 87 s). 20-symbol spot checks vs TSETMC: **yes**, `boors verify reconcile --count 20` matched **71/71 symbol-days** (history rows against a fresh history fetch, today's market-watch rows against GetClosingPriceInfo). Closures and halts flagged: **yes**. Nodes in sync: **mechanism done**, untested between real nodes. **Phase 1 is complete** except the real two-node test. |
+
+Live state on the dev machine: 3,298 instruments, ~60 instruments backfilled (the full ~1,000 takes ~35 min with `boors collect backfill`), today's session appended, 27.5k index rows, 27.7k macro rows, 516 funds, 400 messages. 104 unit/integration tests pass.
+
+### 9.3 Phase 2 status (2026-10-17): backend done, pages pending
+
+Phase 2 is split. The read side the pages need is built and tested. The pages themselves wait for two things:
+- The bit platform MCP tools, which the project's AGENTS.md requires before writing Bit.BlazorUI code. They load when Claude Code is restarted in the repository.
+- A way to run the app: Docker/Podman for Aspire, or a local PostgreSQL.
+
+| Deliverable | Status |
+|---|---|
+| Market overview data | **Done:** `MarketAnalytics.GetOverview`. Covers headline indices (TEDPIX, equal-weight, IFB) with changes, equity and fund value, breadth, halts, buy/sell queues and their values from the close snapshot, individual net flow and per-capita figures (flagged when estimated), USD and coin, and TEDPIX change in dollars. |
+| Breadth, sectors, movers | **Done:** `GetBreadth`, `GetSectors` (cap-weighted and median returns, flows, advancers/decliners, names from TSETMC static data), `GetMovers` (gainers, losers, value, inflow, outflow). |
+| Symbol workspace data | **Done:** `GetInstrumentMetrics` gives point-in-time adjusted 52-week range, 1w–1y returns, the 1-year return in USD, 20-day value and flows, and buyer power with its own-history percentile. The API serves bars (raw + PIT-adjusted close + status + return), flows, corporate events (implied and published), shareholders (refreshed on demand at most daily), Codal letters and supervisor messages. |
+| Screeners (basic) | **Done:** momentum 6-1, 52-week-high proximity, individual-flow intensity (20 sessions), buyer power (5 sessions). Computed in DuckDB SQL with the backtest return convention. |
+| Market watch + TSETMC filters | **Done.** `MarketWatchService` builds the grid for a session (queue state and value, P/E, market cap, per-capita figures, individual buy share). `TsetmcFilter` runs TSETMC filter expressions in the **Jint** JavaScript interpreter: `(pl)`, `(ct).Buy_I_Volume`, `pd1…qo5`, `[ih][n].PClosing`, `[isN]` (from `GetInstValueAllInstAllParam`, collected at EOD), and the `true==function(){...}()` code mode. It is sandboxed: no .NET access, a statement cap, a timeout and a memory cap; a runaway loop is stopped. Verified live: 3,023 rows per evaluation. |
+| Command palette search | **Done:** `MarketAnalytics.Search` (exact symbol, then prefix, then name; primary listings first). |
+| API | **Done, compile-verified:** `IMarketController` (overview, breadth, sectors, movers, screen, search, market watch POST) and `IInstrumentController` (metrics, bars, flows, events, shareholders, letters, messages) with shared DTOs, Mapperly mapping, JSON source-gen registration and generated client proxies. |
+| CLI preview | `boors market overview | breadth | sectors | movers <kind> | screen <kind> | metrics <symbol> | search <text> | watch --filter "…"` shows the same numbers in the terminal. |
+| Pages (overview, market watch, symbol workspace with Lightweight Charts, sectors, screeners, watchlists, command palette, Jalali/RTL, dark mode, PWA) | **Not started**, for the reasons above. |
+
+Live sample (2026-10-17): TEDPIX 8,265,157 (−1.91%); in dollar terms −3.37%; equities 30.8 hemat traded; 146 up / 604 down; 71 buy queues (2.19 hemat) and 143 sell queues (1.59 hemat); individual net flow −6.8 hemat. فولاد: +114% over one year in rials, −11.8% in free-market dollars. Tests: 115 passing.
+
+### 9.4 Data findings from Phase 1 (live, 2026-10-17)
+
+These change how the data must be handled; each is encoded in the code and tests.
+
+1. **TSETMC's published adjustment list is incomplete and dated wrongly.** For فولاد, `GetPriceAdjustList` has 23 events but the bars imply 30. Most capital increases since 2020 are missing (2020-01-12, 2021-05-24, 2022-08-09, 2023-03-19, 2024-02-27, 2025-03-12, 2026-03-30, all matching `GetInstrumentShareChange`). Since 2020 it also dates events by meeting date rather than the day the new base price applied (e.g. listed 2026-08-03, effective 2026-08-05). **Use** `priceYesterday`, which is the exchange's adjusted base price: daily return = `Close / Yesterday − 1`, and implied factor = `Yesterday / previous Close`. Both sources are stored (`price_adjustment.source`).
+2. **Most corporate actions take effect on days with no trades** (the symbol is still halted after its general meeting), so no trade filter may be applied to implied adjustments.
+3. **TAL/block sibling listings** (e.g. `آباد3`, ISIN ending `0003`) never trade on their own and roll their reference price daily. They produced thousands of false "adjustments" until they were linked to their parent (`instrument.parent_ins_code`; inferred rule: stock ISINs ending in `0001` are primary) and excluded from history collection. 275 found.
+4. **The market watch has two response variants for the same request**, apparently per CDN cache period. One is compact and honours `paperTypes` (887 rows for shares); the other is extended, ignores `paperTypes` (3,299 rows) and adds `yVal`, `flow` and `cGrValCot`. Consequences: always filter by class client-side, use `yVal` when present, and treat those fields as optional in contract checks.
+5. **Codal rate-limits bursts with HTTP 429.** The Codal client now defaults to one request every 2 seconds.
+6. **`GetClientTypeAll`** gives same-day individual/institutional volumes and counts for ~2,200 instruments in one call, but no rial values. EOD estimates the values from the day's average price (`values_estimated = true`), and history backfill replaces them with official values.
+7. **`GetInstrumentState/{ins}/{date}`** returns an object on dates with a state record and `[]` otherwise (unknown, not "permitted").
+8. **fipiran's fund list maps 516 funds to InsCode and fund type** in one call. That re-classified 287 ETFs into their rules classes (fixed income, leveraged, gold, etc.).
+9. **Supervisor messages** often name a numbered sibling (`فولاد1`), and some symbols contain a space (`پی پاد`). Linking falls back to the symbol without trailing digits.
+
 Original task list:
 
 1. `dotnet new install Bit.Boilerplate@10.6.2`; create the solution; add the projects from §5.2; Aspire with Postgres 18 + Timescale, MinIO, Redis; add the ParsPack NuGet mirror as a secondary source.
@@ -604,6 +668,8 @@ Original task list:
 | LLM vendor terms exclude Iran | Certain | Medium | AvalAI gateway from Iran, vendor APIs from abroad, local Qwen3/Gemma-3 fallback |
 | Rate limiting or IP ban | Medium | Medium | ≤2 req/s, incremental market watch, server-side fan-out, backoff |
 | Rules change (limits widened, T+1, new halts) | High | Medium | Dated rules table per instrument class; inference checks against `psGelStaMax/Min` |
+| Source response variants and rate limits (market-watch variants, Codal 429) | Certain | Medium | Client-side filtering, known-optional contract fields, per-source token buckets (Codal 0.5 req/s), retries with backoff, circuit breakers |
+| DuckDB single-writer limit | Medium | Low | Jobs serialized per process; one store file per node; rebuild from the raw cache; revisit for multi-user serving in P9 |
 | Bad data (phantom rows, adjusted-price leakage, incomplete tape, inferred compact keys) | Certain | High | `day_status`, PIT adjustment, official totals from closing-price fields, P0 key verification |
 | Signals don't survive frictions | High | Medium (that is the point) | Lab reports honestly; only validated signals get promoted |
 | Blazor Hot Reload instability; no MAUI Linux | Medium | Low | Accept; Windows + Android first |

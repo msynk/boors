@@ -67,6 +67,9 @@ public sealed record ClientTypeDay
 
     /// <summary>Buyer power (قدرت خریدار) = per-capita buy / per-capita sell.</summary>
     public decimal? BuyerPower => PerCapitaBuy is { } b && PerCapitaSell is { } s && s != 0 ? b / s : null;
+
+    /// <summary>True when rial values were estimated from volumes × average price (same-day bulk feed), not official.</summary>
+    public bool ValuesEstimated { get; init; }
 }
 
 /// <summary>
@@ -173,7 +176,147 @@ public sealed record MarketWatchRow
     public int HEven { get; init; }
     public IReadOnlyList<BestLimitLevel> BestLimits { get; init; } = [];
 
-    public InstrumentClass Class => InstrumentClassifier.ClassifyByIsin(Isin);
+    /// <summary>
+    /// TSETMC answers the same market-watch request with one of two variants: a compact one that honours
+    /// <c>paperTypes</c>, and an extended one that ignores it, returns every instrument and adds yVal, flow and the
+    /// board (cGrValCot). These three are therefore null in some snapshots; filter by class client-side.
+    /// </summary>
+    public int? YVal { get; init; }
+
+    public int? Flow { get; init; }
+
+    public string? Board { get; init; }
+
+    public InstrumentClass Class => InstrumentClassifier.Classify(YVal, Flow, Isin);
 }
 
 public sealed record StaticDataItem(int Id, int Code, string Type, string Name, string? Description);
+
+/// <summary>The part of an end-of-day market-watch row that history does not carry.</summary>
+public sealed record SessionSnapshot(
+    long InsCode,
+    DateOnly Date,
+    decimal? Eps,
+    decimal? PriceEarnings,
+    decimal AllowedLow,
+    decimal AllowedHigh,
+    BestLimitLevel? Top)
+{
+    public static SessionSnapshot From(MarketWatchRow row, DateOnly date) =>
+        new(row.InsCode, date, row.Eps, row.PriceEarnings, row.AllowedLow, row.AllowedHigh, row.BestLimits.FirstOrDefault(l => l.Level == 1));
+}
+
+/// <summary>One TSETMC statistic of an instrument; data type N is the filter variable [isN].</summary>
+public sealed record InstrumentStatistic(long InsCode, int DataType, DateOnly? Date, double Value);
+
+/// <summary>Today's individual/institutional volumes and counts for one instrument (GetClientTypeAll; no rial values).</summary>
+public sealed record ClientTypeSnapshot
+{
+    public required long InsCode { get; init; }
+    public long BuyIndividualVolume { get; init; }
+    public long BuyInstitutionalVolume { get; init; }
+    public int BuyIndividualCount { get; init; }
+    public int BuyInstitutionalCount { get; init; }
+    public long SellIndividualVolume { get; init; }
+    public long SellInstitutionalVolume { get; init; }
+    public int SellIndividualCount { get; init; }
+    public int SellInstitutionalCount { get; init; }
+
+    /// <summary>
+    /// Converts to a <see cref="ClientTypeDay"/> using the day's average price (value / volume) to estimate rial values.
+    /// The history endpoint later replaces these with official values.
+    /// </summary>
+    public ClientTypeDay ToEstimatedDay(DateOnly date, decimal averagePrice) => new()
+    {
+        InsCode = InsCode,
+        Date = date,
+        BuyIndividualVolume = BuyIndividualVolume,
+        BuyInstitutionalVolume = BuyInstitutionalVolume,
+        BuyIndividualValue = BuyIndividualVolume * averagePrice,
+        BuyInstitutionalValue = BuyInstitutionalVolume * averagePrice,
+        BuyIndividualCount = BuyIndividualCount,
+        BuyInstitutionalCount = BuyInstitutionalCount,
+        SellIndividualVolume = SellIndividualVolume,
+        SellInstitutionalVolume = SellInstitutionalVolume,
+        SellIndividualValue = SellIndividualVolume * averagePrice,
+        SellInstitutionalValue = SellInstitutionalVolume * averagePrice,
+        SellIndividualCount = SellIndividualCount,
+        SellInstitutionalCount = SellInstitutionalCount,
+        ValuesEstimated = true,
+    };
+}
+
+/// <summary>Latest value of an index (GetIndexB1LastAll).</summary>
+public sealed record IndexSnapshot
+{
+    public required long InsCode { get; init; }
+    public required string Name { get; init; }
+    public TimeOnly? Time { get; init; }
+    public decimal Value { get; init; }
+    public decimal High { get; init; }
+    public decimal Low { get; init; }
+    public decimal Change { get; init; }
+    public decimal ChangePercent { get; init; }
+}
+
+public enum MessageKind
+{
+    Other,
+    Halt,
+    Reopen,
+}
+
+/// <summary>Why a symbol was halted, from the supervisor message text.</summary>
+public enum HaltReason
+{
+    Unknown,
+
+    /// <summary>Material disclosure (افشای اطلاعات با اهمیت), usually reopening within two business days.</summary>
+    Disclosure,
+
+    /// <summary>General meeting (مجمع).</summary>
+    GeneralMeeting,
+
+    /// <summary>Supervisory: suspension, transparency review, suspected manipulation.</summary>
+    Supervisory,
+
+    /// <summary>Derivative or dependent instrument halted because its underlying was halted.</summary>
+    Underlying,
+}
+
+/// <summary>A market-supervisor message (پیام ناظر).</summary>
+public sealed record SupervisorMessage
+{
+    public required long Id { get; init; }
+    public required DateOnly Date { get; init; }
+    public TimeOnly? Time { get; init; }
+    public required string Title { get; init; }
+    public string? Body { get; init; }
+    public int Flow { get; init; }
+    public MessageKind Kind { get; init; }
+    public HaltReason Reason { get; init; }
+
+    /// <summary>True when the text says the symbol reopens without a price limit (بدون محدودیت).</summary>
+    public bool ReopensWithoutLimit { get; init; }
+
+    /// <summary>Symbols written in parentheses in the title or body, normalized.</summary>
+    public IReadOnlyList<string> MentionedSymbols { get; init; } = [];
+}
+
+public sealed record ShareholderPosition
+{
+    public required long InsCode { get; init; }
+    public required DateOnly SnapshotDate { get; init; }
+    public required long HolderShareId { get; init; }
+    public required string HolderName { get; init; }
+    public decimal Shares { get; init; }
+    public decimal Percent { get; init; }
+    public int Change { get; init; }
+    public decimal ChangeAmount { get; init; }
+}
+
+/// <summary>State of an instrument on one date (GetInstrumentState).</summary>
+public sealed record InstrumentStateOnDate(long InsCode, DateOnly Date, string? State, TimeOnly? Time)
+{
+    public bool IsHalted => State is not null && State != "A";
+}

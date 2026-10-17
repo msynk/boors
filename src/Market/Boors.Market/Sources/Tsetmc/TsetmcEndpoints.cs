@@ -1,3 +1,4 @@
+using Boors.Market.Domain;
 using Boors.Market.RawCache;
 
 namespace Boors.Market.Sources.Tsetmc;
@@ -47,6 +48,28 @@ public sealed class TsetmcEndpoints(string baseUrl = TsetmcEndpoints.DefaultBase
     public RawRequest BestLimits(long insCode) => ForInstrument("BestLimits", insCode);
 
     public RawRequest IndexHistory(long indexInsCode) => ForInstrument("Index/GetIndexB2History", indexInsCode);
+
+    /// <summary>Same-day individual/institutional volumes and counts for every instrument.</summary>
+    public RawRequest ClientTypeAll() => new(Source, "ClientType/GetClientTypeAll", $"{baseUrl}ClientType/GetClientTypeAll", string.Empty);
+
+    /// <summary>Latest values of all indices of a market (flow 1 = TSE, 2 = IFB).</summary>
+    public RawRequest IndexSnapshots(int flow = 1) =>
+        new(Source, "Index/GetIndexB1LastAll", $"{baseUrl}Index/GetIndexB1LastAll/All/{Inv(flow)}", $"flow={Inv(flow)}");
+
+    public RawRequest MessagesByInstrument(long insCode) => ForInstrument("Msg/GetMsgByInsCode", insCode);
+
+    /// <summary>The latest <paramref name="top"/> supervisor messages of a market.</summary>
+    public RawRequest MessagesByFlow(int flow, int top) =>
+        new(Source, "Msg/GetMsgByFlow", $"{baseUrl}Msg/GetMsgByFlow/{Inv(flow)}/{Inv(top)}", $"flow={Inv(flow)}&top={Inv(top)}");
+
+    public RawRequest Shareholders(long insCode) => ForInstrument("Shareholder/GetInstrumentShareHolderLast", insCode);
+
+    public RawRequest InstrumentState(long insCode, DateOnly date) =>
+        new(Source, "MarketData/GetInstrumentState", $"{baseUrl}MarketData/GetInstrumentState/{Inv(insCode)}/{Inv(DEven.FromDate(date))}", $"insCode={Inv(insCode)}&date={Inv(DEven.FromDate(date))}");
+
+    /// <summary>Per-instrument statistics for all instruments (~330k rows, ~2 MB); data type N is the filter variable [isN].</summary>
+    public RawRequest InstrumentStatistics() =>
+        new(Source, "MarketData/GetInstValueAllInstAllParam", $"{baseUrl}MarketData/GetInstValueAllInstAllParam", string.Empty);
 
     public RawRequest StaticData() => new(Source, "StaticData/GetStaticData", $"{baseUrl}StaticData/GetStaticData", string.Empty);
 

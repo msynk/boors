@@ -132,9 +132,42 @@ public static partial class Program
                                                                        Cron.Hourly);
         scheduled.Add(AiChatImagesRetentionJobRunner.RecurringJobId);
 
+        app.ScheduleMarketDataJobs(recurringJobManager, scheduled);
+
         app.RemoveUnscheduledRecurringJobs(scheduled);
 
         return app;
+    }
+
+    /// <summary>
+    /// Market-data collection, in Iran time. Trading days are Saturday-Wednesday (cron 6,0-3); equities close with the
+    /// closing-price stage at 13:00 and non-equity ETFs at 18:00 (from 18 Mehr 1405), so end of day runs twice.
+    /// Scheduled only when MarketData:Collect is true; otherwise the jobs are removed as unscheduled.
+    /// </summary>
+    private static void ScheduleMarketDataJobs(this WebApplication app, IRecurringJobManager recurringJobManager, List<string> scheduled)
+    {
+        var options = app.Services.GetRequiredService<IOptions<Boors.Market.MarketDataOptions>>().Value;
+        if (options.Collect is false)
+            return;
+
+        var iran = new RecurringJobOptions { TimeZone = Boors.Market.Text.IranTime.Zone };
+        void Schedule(string job, string cron, string? suffix = null)
+        {
+            var id = $"{Features.MarketData.MarketDataJobRunner.RecurringJobPrefix}{job}{suffix}";
+            recurringJobManager.AddOrUpdate<Features.MarketData.MarketDataJobRunner>(id, runner => runner.Run(job, CancellationToken.None), cron, iran);
+            scheduled.Add(id);
+        }
+
+        Schedule("instruments", "30 7 * * *");
+        Schedule("eod", "35 13 * * 6,0-3");
+        Schedule("eod", "35 18 * * 6,0-3", ".etf");
+        Schedule("messages", "*/30 8-18 * * 6,0-3");
+        Schedule("codal", "*/15 7-23 * * *");
+        Schedule("macro", "0 9,13,17,21 * * *");
+        Schedule("funds", "0 20 * * *");
+        Schedule("indices", "15 1 * * *");
+        Schedule("backfill", "0 2 * * *");
+        Schedule("halts", "0 3 * * *");
     }
 
     /// <summary>

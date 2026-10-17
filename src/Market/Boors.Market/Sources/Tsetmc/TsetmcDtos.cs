@@ -36,6 +36,8 @@ internal sealed record ClosingPriceDto
 
 internal sealed record InstrumentStateDto
 {
+    public int HEven { get; init; }
+    public int RealHeven { get; init; }
     public string? CEtaval { get; init; }
     public string? CEtavalTitle { get; init; }
     public int UnderSupervision { get; init; }
@@ -230,6 +232,14 @@ internal sealed record MarketWatchDto
     public decimal Ztd { get; init; }
     public int HEven { get; init; }
     public List<MarketWatchBestLimitDto>? BlDs { get; init; }
+
+    // Present only in the "extended" response variant (see MarketWatchRow.YVal).
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    public int? YVal { get; init; }
+
+    public int? Flow { get; init; }
+
+    [JsonPropertyName("cGrValCot")] public string? CGrValCot { get; init; }
 }
 
 internal sealed record MarketWatchBestLimitDto
@@ -242,6 +252,77 @@ internal sealed record MarketWatchBestLimitDto
     public decimal Zmo { get; init; }
     public decimal Qmo { get; init; }
     public long Rid { get; init; }
+}
+
+internal sealed record ClientTypeAllEnvelope(List<ClientTypeAllDto>? ClientTypeAllDto);
+
+/// <summary>Today's flows for every instrument (volumes and counts only, no rial values).</summary>
+internal sealed record ClientTypeAllDto
+{
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    public long? InsCode { get; init; }
+
+    [JsonPropertyName("buy_I_Volume")] public decimal BuyIVolume { get; init; }
+    [JsonPropertyName("buy_N_Volume")] public decimal BuyNVolume { get; init; }
+    [JsonPropertyName("buy_CountI")] public decimal BuyCountI { get; init; }
+    [JsonPropertyName("buy_CountN")] public decimal BuyCountN { get; init; }
+    [JsonPropertyName("sell_I_Volume")] public decimal SellIVolume { get; init; }
+    [JsonPropertyName("sell_N_Volume")] public decimal SellNVolume { get; init; }
+    [JsonPropertyName("sell_CountI")] public decimal SellCountI { get; init; }
+    [JsonPropertyName("sell_CountN")] public decimal SellCountN { get; init; }
+}
+
+internal sealed record IndexB1Envelope(List<IndexB1Dto>? IndexB1);
+
+internal sealed record IndexB1Dto
+{
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+    public long? InsCode { get; init; }
+
+    public int DEven { get; init; }
+    public int HEven { get; init; }
+    public string? LVal30 { get; init; }
+
+    /// <summary>Last value.</summary>
+    public decimal XDrNivJIdx004 { get; init; }
+
+    /// <summary>High.</summary>
+    public decimal XPhNivJIdx004 { get; init; }
+
+    /// <summary>Low.</summary>
+    public decimal XPbNivJIdx004 { get; init; }
+
+    /// <summary>Percent change.</summary>
+    public decimal XVarIdxJRfV { get; init; }
+
+    public decimal IndexChange { get; init; }
+}
+
+internal sealed record MessageEnvelope(List<MessageDto>? Msg);
+
+internal sealed record MessageDto
+{
+    public long TseMsgIdn { get; init; }
+    public int DEven { get; init; }
+    public int HEven { get; init; }
+    public string? TseTitle { get; init; }
+    public string? TseDesc { get; init; }
+    public int Flow { get; init; }
+}
+
+internal sealed record ShareholderEnvelope(List<ShareholderDto>? ShareHolder);
+
+internal sealed record ShareholderDto
+{
+    public long ShareHolderID { get; init; }
+    public string? ShareHolderName { get; init; }
+    public string? CIsin { get; init; }
+    public int DEven { get; init; }
+    public decimal NumberOfShares { get; init; }
+    public decimal PerOfShares { get; init; }
+    public int Change { get; init; }
+    public decimal ChangeAmount { get; init; }
+    public long ShareHolderShareID { get; init; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -257,4 +338,8 @@ internal sealed record MarketWatchBestLimitDto
 [JsonSerializable(typeof(InstrumentSearchEnvelope))]
 [JsonSerializable(typeof(StaticDataEnvelope))]
 [JsonSerializable(typeof(MarketWatchEnvelope))]
+[JsonSerializable(typeof(ClientTypeAllEnvelope))]
+[JsonSerializable(typeof(IndexB1Envelope))]
+[JsonSerializable(typeof(MessageEnvelope))]
+[JsonSerializable(typeof(ShareholderEnvelope))]
 internal sealed partial class TsetmcJsonContext : JsonSerializerContext;

@@ -66,6 +66,27 @@ public sealed class TsetmcClient(HttpClient http, IRawCache cache, TimeProvider 
     public async Task<IReadOnlyList<StaticDataItem>> GetStaticDataAsync(CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
         TsetmcParser.ParseStaticData(await GetBodyAsync(Endpoints.StaticData(), policy, cancellationToken));
 
+    public async Task<IReadOnlyList<ClientTypeSnapshot>> GetClientTypeAllAsync(CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseClientTypeAll(await GetBodyAsync(Endpoints.ClientTypeAll(), policy, cancellationToken));
+
+    public async Task<IReadOnlyList<IndexSnapshot>> GetIndexSnapshotsAsync(int flow = 1, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseIndexSnapshots(await GetBodyAsync(Endpoints.IndexSnapshots(flow), policy, cancellationToken));
+
+    public async Task<IReadOnlyList<SupervisorMessage>> GetMessagesAsync(long insCode, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseMessages(await GetBodyAsync(Endpoints.MessagesByInstrument(insCode), policy, cancellationToken));
+
+    public async Task<IReadOnlyList<SupervisorMessage>> GetLatestMessagesAsync(int flow, int top, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseMessages(await GetBodyAsync(Endpoints.MessagesByFlow(flow, top), policy, cancellationToken));
+
+    public async Task<IReadOnlyList<ShareholderPosition>> GetShareholdersAsync(long insCode, DateOnly snapshotDate, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseShareholders(await GetBodyAsync(Endpoints.Shareholders(insCode), policy, cancellationToken), insCode, snapshotDate);
+
+    public async Task<InstrumentStateOnDate> GetInstrumentStateAsync(long insCode, DateOnly date, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseInstrumentState(await GetBodyAsync(Endpoints.InstrumentState(insCode, date), policy, cancellationToken), insCode, date);
+
+    public async Task<IReadOnlyList<InstrumentStatistic>> GetInstrumentStatisticsAsync(CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseInstrumentStatistics(await GetBodyAsync(Endpoints.InstrumentStatistics(), policy, cancellationToken));
+
     public async Task<MarketWatchSnapshot> GetMarketWatchAsync(MarketWatchQuery? query = null, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
         TsetmcParser.ParseMarketWatch(await GetBodyAsync(Endpoints.MarketWatch(query ?? new MarketWatchQuery()), policy, cancellationToken));
 }

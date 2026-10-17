@@ -45,7 +45,16 @@ public abstract class RawSourceClient(HttpClient http, IRawCache cache, TimeProv
             throw new NotCachedException(request);
 
         var started = timeProvider.GetTimestamp();
-        using var response = await http.GetAsync(request.Url, HttpCompletionOption.ResponseContentRead, cancellationToken);
+        using var message = new HttpRequestMessage(request.JsonBody is null ? HttpMethod.Get : HttpMethod.Post, request.Url);
+        if (request.JsonBody is not null)
+            message.Content = new StringContent(request.JsonBody, System.Text.Encoding.UTF8, "application/json");
+        foreach (var (name, value) in request.Headers ?? new Dictionary<string, string>())
+        {
+            message.Headers.Remove(name);
+            message.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        using var response = await http.SendAsync(message, HttpCompletionOption.ResponseContentRead, cancellationToken);
         var body = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         var entry = await cache.StoreAsync(request, body, (int)response.StatusCode, response.Content.Headers.ContentType?.ToString(), timeProvider.GetUtcNow(), cancellationToken);
 

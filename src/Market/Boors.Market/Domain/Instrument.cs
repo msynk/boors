@@ -71,6 +71,13 @@ public sealed record Instrument
     public decimal? FreeFloatPercent { get; init; }
 
     public InstrumentClass Class { get; init; }
+
+    /// <summary>
+    /// For a secondary listing of a stock (TAL closing-price board, block board; ISIN not ending in 0001), the primary
+    /// listing's InsCode. Secondary listings mirror the parent's price and are excluded from history collection.
+    /// Inferred rule: stock ISINs ending in 0001 are primary listings (true for every sample checked on 2026-10-17).
+    /// </summary>
+    public long? ParentInsCode { get; init; }
 }
 
 /// <summary>
@@ -117,6 +124,9 @@ public static class InstrumentClassifier
             _ => flow == 3 ? InstrumentClass.Option : InstrumentClass.Other,
         };
     }
+
+    public static InstrumentClass FromRuleKey(string key) =>
+        Enum.GetValues<InstrumentClass>().FirstOrDefault(c => c.ToRuleKey() == key);
 
     /// <summary>The snake_case key used for this class in rules.yaml.</summary>
     public static string ToRuleKey(this InstrumentClass instrumentClass) => instrumentClass switch

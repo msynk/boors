@@ -9,6 +9,7 @@ using Boors.Server.Api.Features.Diagnostic;
 using Boors.Server.Api.Features.Attachments;
 using Boors.Server.Api.Features.PersonalData;
 using Boors.Server.Api.Features.PushNotification;
+using Boors.Market;
 using Boors.Server.Api.Features.Tenants;
 using Boors.Server.Api.Features.Todo;
 using Microsoft.Agents.AI;
@@ -71,6 +72,11 @@ public static partial class Program
 
         services.AddPersonalDataServices();
         services.AddScoped<Features.Attachments.AiChatImagesRetentionJobRunner>();
+
+        // Market data (src/Market): raw cache, DuckDB market store, TSETMC/Codal/tgju/fipiran clients, collectors.
+        services.AddOptions<Boors.Market.MarketDataOptions>().Bind(configuration.GetSection(Boors.Market.MarketDataOptions.SectionName));
+        services.AddBoorsMarketData();
+        services.AddScoped<Features.MarketData.MarketDataJobRunner>();
         services.AddScoped<Infrastructure.SignalR.AppChatbot>();
         services.AddSingleton<Features.Chatbot.ChatbotAnswerSigner>();
         services.AddDevMcp()
@@ -776,6 +782,10 @@ public static partial class Program
             .AddCheck<UserProfileImagesStorageHealthCheck>("userProfileImages", failureStatus: HealthStatus.Degraded, timeout: TimeSpan.FromSeconds(5))
             // Cached, as signing in on every probe can trip the mail provider's brute force protection.
             .AddCachedCheck("smtp", _ => new SmtpHealthCheck(GetSmtpSettings(configuration)), cacheDuration: TimeSpan.FromMinutes(5), timeout: TimeSpan.FromSeconds(10));
+
+        // Market data freshness only means something on a node that collects.
+        if (configuration.GetValue<bool>($"{Boors.Market.MarketDataOptions.SectionName}:{nameof(Boors.Market.MarketDataOptions.Collect)}"))
+            healthChecksBuilder.AddCheck<Features.MarketData.MarketDataHealthCheck>("marketData", failureStatus: HealthStatus.Degraded, timeout: TimeSpan.FromSeconds(10));
 
         // Outside development, a missing configuration is most likely a deployment mistake, so it reports Degraded.
         // A project that doesn't use a dependency should remove its code.

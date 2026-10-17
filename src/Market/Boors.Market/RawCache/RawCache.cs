@@ -12,6 +12,12 @@ namespace Boors.Market.RawCache;
 public sealed record RawRequest(string Source, string Endpoint, string Url, string ParamsKey)
 {
     public string ParamsHash { get; } = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ParamsKey)))[..16];
+
+    /// <summary>JSON body for POST endpoints (e.g. fipiran fund comparison); null means GET. Must be reflected in <see cref="ParamsKey"/>.</summary>
+    public string? JsonBody { get; init; }
+
+    /// <summary>Extra request headers some sources require (e.g. fipiran's Referer).</summary>
+    public IReadOnlyDictionary<string, string>? Headers { get; init; }
 }
 
 /// <summary>Metadata of one stored response. The body lives next to it, gzip-compressed.</summary>
@@ -141,6 +147,12 @@ public sealed class FileSystemRawCache(RawCacheOptions options) : IRawCache
                 yield return entry;
         }
     }
+
+    /// <summary>Points "latest" at an entry that arrived from another node, if it is newer than the current one.</summary>
+    public Task RefreshLatestPointerAsync(RawEntry entry, CancellationToken cancellationToken = default) =>
+        entry.IsSuccess
+            ? WriteLatestPointerAsync(new RawRequest(entry.Source, entry.Endpoint, entry.Url, entry.ParamsKey), entry, cancellationToken)
+            : Task.CompletedTask;
 
     private async Task<string> WriteOnceAsync(string directory, string baseName, ReadOnlyMemory<byte> body, CancellationToken cancellationToken)
     {
