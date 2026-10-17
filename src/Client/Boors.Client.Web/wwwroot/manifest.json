@@ -1,0 +1,54 @@
+{
+    "version": "1",
+
+    "dir": "ltr",
+    "lang": "en",
+    "scope": "/",
+    "start_url": "/",
+    "orientation": "any",
+    "id": "bitBoors",
+    "display": "standalone",
+    "theme_color": "#FFFFFF",
+    "name": "bit Boors",
+    "background_color": "#0D2960",
+    "short_name": "bit Boors",
+    "prefer_related_applications": false,
+    "display_override": [ "window-controls-overlay" ],
+    "description": "bit Boors is a project template that includes all the necessary parts to create a fully-featured web app.",
+
+    "related_applications": [],
+    "capture_links": "existing-client-navigate",
+    "launch_handler": {
+        "client_mode": "auto"
+    },
+
+    "features": [
+        "Cross Platform",
+        "fast",
+        "simple"
+    ],
+    "categories": [
+        "utilities"
+    ],
+    "icons": [
+        {
+            "sizes": "512x512",
+            "type": "image/png",
+            "src": "images/icons/bit-icon-512.png"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Terms",
+            "url": "/terms"
+        },
+        {
+            "name": "Todo",
+            "url": "/offline-todo"
+        },
+        {
+            "name": "Profile",
+            "url": "/settings/profile"
+        }
+    ]
+}

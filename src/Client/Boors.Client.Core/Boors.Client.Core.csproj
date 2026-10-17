@@ -1,0 +1,91 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ResolveStaticWebAssetsInputsDependsOn>
+            BeforeBuildTasks;
+            $(ResolveStaticWebAssetsInputsDependsOn)
+        </ResolveStaticWebAssetsInputsDependsOn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <SupportedPlatform Include="browser" />
+        <Content Remove="appsettings*.json" />
+        <EmbeddedResource Include="appsettings*.json" />
+
+        <PackageReference Include="Bit.Butil" />
+        <PackageReference Include="Bit.BlazorUI" />
+        <PackageReference Include="Bit.BlazorUI.Icons" />
+        <PackageReference Include="Bit.BlazorUI.Assets" />
+        <Using Include="Microsoft.AspNetCore.SignalR.Client" />
+        <Using Include="Microsoft.EntityFrameworkCore" />
+        <Using Include="Boors.Client.Core.Infrastructure.Data" />
+        <PackageReference Include="Bit.Besql" />
+        <PackageReference Include="CommunityToolkit.Datasync.Client" />
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+                <PackageReference Include="Bit.BlazorUI.Extras" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Configuration" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+
+        <Using Include="System.Reflection" />
+        <Using Include="System.Net.Http.Json" />
+        <Using Include="System.Collections.Concurrent" />
+        <Using Include="System.Runtime.CompilerServices" />
+        <Using Include="Microsoft.JSInterop" />
+        <Using Include="Microsoft.Extensions.Logging" />
+        <Using Include="Microsoft.AspNetCore.Components" />
+        <Using Include="Microsoft.AspNetCore.Authorization" />
+        <Using Include="Microsoft.AspNetCore.Components.Routing" />
+        <Using Include="Microsoft.AspNetCore.Components.Authorization" />
+        <Using Include="Bit.Butil" />
+        <Using Include="Bit.BlazorUI" />
+        <Using Include="Boors.Shared" />
+        <Using Include="Boors.Shared.Features.Identity" />
+        <Using Include="Boors.Shared.Features.Identity.Dtos" />
+        <Using Include="Boors.Client.Core.Components.Layout" />
+        <Using Include="Boors.Client.Core.Components.Common" />
+        <Using Include="Boors.Client.Core.Infrastructure.Services" />
+        <Using Include="Boors.Client.Core.Infrastructure.Services.Contracts" />
+        <Using Include="Boors.Client.Core.Infrastructure.Services.HttpMessageHandlers" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Shared\Boors.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <TypeScriptFiles Include="**\*.ts" Exclude="node_modules\**\*.ts" />
+    </ItemGroup>
+
+    <Target Name="BeforeBuildTasks" AfterTargets="CoreCompile">
+        <CallTarget Targets="InstallNodejsDependencies" />
+        <CallTarget Targets="BuildJavaScript" />
+        <CallTarget Targets="BuildCssFiles" />
+    </Target>
+
+    <Target Name="InstallNodejsDependencies" Inputs="package.json;package-lock.json" Outputs="node_modules\.package-lock.json">
+        <Exec Command="npm install" StandardOutputImportance="high" StandardErrorImportance="high" />
+    </Target>
+
+    <Target Name="BuildJavaScript" Inputs="@(TypeScriptFiles);tsconfig.json;package.json;package-lock.json" Outputs="wwwroot\scripts\app.js">
+        <Exec Command="node_modules/.bin/tsc" StandardOutputImportance="high" StandardErrorImportance="high" />
+        <Exec Condition=" '$(Environment)' == 'Development' " Command="node_modules/.bin/esbuild Scripts/index.ts --bundle --target=safari15,firefox100,chrome95 --outfile=wwwroot/scripts/app.js" StandardOutputImportance="high" StandardErrorImportance="high" />
+        <Exec Condition=" '$(Environment)' != 'Development' " Command="node_modules/.bin/esbuild Scripts/index.ts --bundle --target=safari15,firefox100,chrome95 --outfile=wwwroot/scripts/app.js --minify" StandardOutputImportance="high" StandardErrorImportance="high" />
+    </Target>
+
+    <Target Name="BuildCssFiles">
+        <Exec Command="node_modules/.bin/sass Components:Components Styles/app.scss:wwwroot/styles/app.css --style compressed --silence-deprecation=import --update --color" StandardOutputImportance="high" StandardErrorImportance="high" LogStandardErrorAsError="true" />
+    </Target>
+
+    <ItemGroup>
+        <Content Remove="package*.json" />
+        <Content Remove="tsconfig.json" />
+        <None Include="package*json" />
+        <None Include="tsconfig.json" />
+    </ItemGroup>
+
+</Project>

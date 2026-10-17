@@ -1,0 +1,24 @@
+using Microsoft.AspNetCore.Authentication.BearerToken;
+
+namespace Boors.Server.Api.Features.Identity.Services;
+
+public class AppBearerTokenOptionsConfigurator(IConfiguration configuration,
+    IServiceProvider serviceProvider) : IPostConfigureOptions<BearerTokenOptions>
+{
+    public void PostConfigure(string? name, BearerTokenOptions options)
+    {
+        options.BearerTokenProtector = ActivatorUtilities.CreateInstance<AppJwtSecureDataFormat>(serviceProvider, "AccessToken");
+        options.RefreshTokenProtector = ActivatorUtilities.CreateInstance<AppJwtSecureDataFormat>(serviceProvider, "RefreshToken");
+
+        options.Events = new()
+        {
+            OnMessageReceived = async context =>
+            {
+                // The server accepts the accessToken from the authorization header, the app hub's query string or the cookie.
+                context.Token ??= context.HttpContext.GetAccessToken();
+            }
+        };
+
+        configuration.GetRequiredSection("Identity").Bind(options);
+    }
+}

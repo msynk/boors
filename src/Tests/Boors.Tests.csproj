@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <RunSettingsFilePath>$(MSBuildProjectDirectory)\.runsettings</RunSettingsFilePath>
+        <TestingPlatformCommandLineArguments>--settings ./.runsettings --report-trx --report-trx-filename TestResults.trx --results-directory ./TestResults</TestingPlatformCommandLineArguments>
+        <EnableMSTestRunner>true</EnableMSTestRunner>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.Testing" />
+        <PackageReference Include="Bit.BlazorES2019" />
+        <PackageReference Include="FakeItEasy" />
+        <PackageReference Include="Microsoft.Playwright.MSTest.v4" />
+        <PackageReference Include="bunit" />
+        <PackageReference Include="MSTest" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Server\Boors.Server.Web\Boors.Server.Web.csproj" />
+        <ProjectReference Include="..\Server\Boors.Server.Api\Boors.Server.Api.csproj" />
+        <ProjectReference Include="..\Server\Boors.Server.AppHost\Boors.Server.AppHost.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="System.Net" />
+        <Using Include="System.Net.Http.Headers" />
+        <Using Include="System.Net.Http.Json" />
+        <Using Include="System.Text.RegularExpressions" />
+        <Using Include="Boors.Shared" />
+        <Using Include="Boors.Shared.Features.Identity" />
+        <Using Include="Boors.Server.Web" />
+        <Using Include="Boors.Server.Api.Infrastructure.Data" />
+        <Using Include="Boors.Server.Api.Features.Identity.Models" />
+        <Using Include="Boors.Client.Core.Infrastructure.Services" />
+        <Using Include="Boors.Client.Core.Infrastructure.Services.Contracts" />
+        <Using Include="Boors.Tests.Infrastructure" />
+        <Using Include="Boors.Tests.Infrastructure.Services" />
+        <Using Include="Boors.Tests.Features.Identity" />
+        <Using Include="Microsoft.AspNetCore.Http" />
+        <Using Include="Microsoft.AspNetCore.Components" />
+        <Using Include="Microsoft.EntityFrameworkCore" />
+        <Using Include="Microsoft.Extensions.Hosting" />
+        <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+        <Using Include="Microsoft.Playwright" />
+        <Using Include="Microsoft.Playwright.MSTest" />
+        <Using Include="FakeItEasy" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,17 @@
+using Boors.Shared.Features.Attachments;
+
+namespace Boors.Server.Api.Features.Attachments;
+
+public partial class Attachment
+{
+    public Guid Id { get; set; }
+
+    public AttachmentKind Kind { get; set; }
+
+    public string? Path { get; set; }
+
+    [MaxLength(100)]
+    public string? ContentType { get; set; }
+
+    public DateTimeOffset CreatedOn { get; set; }
+}

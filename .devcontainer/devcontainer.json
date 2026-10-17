@@ -1,0 +1,52 @@
+{
+    "name": "Boors",
+    "image": "mcr.microsoft.com/dotnet/sdk:10.0.401",
+    "hostRequirements": {
+        "cpus": 4
+    },
+    "waitFor": "onCreateCommand",
+    "postCreateCommand": "dotnet dev-certs https --trust",
+    "customizations": {
+        "codespaces": {
+            "openFiles": [
+                "README.md"
+            ]
+        },
+        "vscode": {
+            "extensions": [
+                "ms-dotnettools.csharp",
+                "Anthropic.claude-code",
+                "ms-dotnettools.csdevkit",
+                "ms-azuretools.vscode-docker",
+                "microsoft-aspire.aspire-vscode",
+                "ms-vscode-remote.remote-containers",
+                "ms-dotnettools.blazorwasm-companion",
+                "ms-dotnettools.vscode-dotnet-runtime"
+            ]
+        }
+    },
+    "forwardPorts": [
+        2243,
+        2140,
+        2004,
+        4226,
+        5000,
+        5062
+    ],
+    "features": {
+        "ghcr.io/microsoft/aspire-devcontainer-feature/aspire:3": {},
+        "ghcr.io/devcontainers/features/powershell:2": {},
+        "ghcr.io/devcontainers/features/docker-in-docker:4": {},
+        "ghcr.io/devcontainers/features/node:2": {
+            "version": "24"
+        },
+        "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+            "version": "1",
+            "helm": "3",
+            "minikube": "1"
+        }
+    },
+    "remoteEnv": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+    }
+}

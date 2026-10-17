@@ -1,0 +1,21 @@
+<Project>
+    <!-- Inherit the solution-wide settings (nullable, central package management, analyzers, etc.). -->
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+    <!--
+    The market-data projects are plain libraries/tools with no dependency on Boors.Shared or the Blazor stack,
+    so drop the solution-wide global usings that point at namespaces these projects do not reference.
+    -->
+    <ItemGroup>
+        <Using Remove="Boors.Shared" />
+        <Using Remove="Boors.Shared.Resources" />
+        <Using Remove="Boors.Shared.Infrastructure.Dtos" />
+        <Using Remove="Boors.Shared.Infrastructure.Services" />
+        <Using Remove="Boors.Shared.Infrastructure.Exceptions" />
+        <Using Remove="Boors.Shared.Infrastructure.Attributes" />
+        <Using Remove="Boors.Shared.Infrastructure.Services.Contracts" />
+        <Using Remove="Microsoft.Extensions.Localization" />
+        <Using Remove="Microsoft.Extensions.Caching.Memory" />
+        <Using Remove="Microsoft.Extensions.Configuration" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,18 @@
+{
+  "solution": {
+    "path": "Boors.slnx",
+    "projects": [
+      "src\\Client\\Boors.Client.Core\\Boors.Client.Core.csproj",
+      "src\\Client\\Boors.Client.Web\\Boors.Client.Web.csproj",
+      "src\\Server\\Boors.Server.AppHost\\Boors.Server.AppHost.csproj",
+      "src\\Server\\Boors.Server.Api\\Boors.Server.Api.csproj",
+      "src\\Server\\Boors.Server.Shared\\Boors.Server.Shared.csproj",
+      "src\\Server\\Boors.Server.Web\\Boors.Server.Web.csproj",
+      "src\\Shared\\Boors.Shared.csproj",
+      "src\\Tests\\Boors.Tests.csproj",
+      "src\\Market\\Boors.Market\\Boors.Market.csproj",
+      "src\\Market\\Boors.Market.Cli\\Boors.Market.Cli.csproj",
+      "src\\Market\\Boors.Market.Tests\\Boors.Market.Tests.csproj"
+    ]
+  }
+}

@@ -1,0 +1,96 @@
+using Boors.Client.Core.Components;
+
+namespace Boors.Client.Core.Infrastructure.Services;
+
+/// <summary>
+/// This class is located in the Client.Core project to define
+/// shared app messages used for messaging between Blazor components, JavaScript and Web Service Worker.
+/// </summary>
+public partial class ClientAppMessages
+    : SharedAppMessages
+{
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should show a snack bar message.
+    /// </summary>
+    public const string SHOW_SNACK = nameof(SHOW_SNACK);
+
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should show a modal.
+    /// </summary>
+    public const string SHOW_MODAL = nameof(SHOW_MODAL);
+
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should close the modal.
+    /// </summary>
+    public const string CLOSE_MODAL = nameof(CLOSE_MODAL);
+
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should open the navigation panel.
+    /// </summary>
+    public const string OPEN_NAV_PANEL = nameof(OPEN_NAV_PANEL);
+
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should close the navigation panel.
+    /// </summary>
+    public const string CLOSE_NAV_PANEL = nameof(CLOSE_NAV_PANEL);
+
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should show the diagnostic modal.
+    /// </summary>
+    public const string SHOW_DIAGNOSTIC_MODAL = nameof(SHOW_DIAGNOSTIC_MODAL);
+
+
+
+    /// <summary>
+    /// A publisher that sends this message announces that the subscriber should force the app to check for updates and install them.
+    /// </summary>
+    public const string FORCE_UPDATE = nameof(FORCE_UPDATE);
+
+
+
+    /// <summary>
+    /// A publisher that publishes this message notifies that the app theme has changed.
+    /// </summary>
+    public const string THEME_CHANGED = nameof(THEME_CHANGED);
+
+    /// <summary>
+    /// A publisher that sends this message announces that the whole app - the router, the layout, the app menu and
+    /// the current page - should be torn down and built again, so a change reaching all of them at once (a new
+    /// culture, time zone or tenant) lands everywhere without each of them listening for it.
+    /// <para>
+    /// SOFT: only the component tree is rebuilt, while the .NET and blazor webassembly/hybrid runtimes and every
+    /// service keep running - far cheaper than a <c>forceLoad</c> navigation. <c>Routes</c> is the one subscriber,
+    /// keying the tree on a counter this message increments (See <c>Routes.razor</c>).
+    /// </para>
+    /// </summary>
+    public const string SOFT_RESTART = nameof(SOFT_RESTART);
+
+    /// <summary>
+    /// A publisher that publishes this message notifies that the online status of the app has changed.
+    /// <inheritdoc cref="Parameters.IsOnline"/>
+    /// </summary>
+    public const string IS_ONLINE_CHANGED = nameof(IS_ONLINE_CHANGED);
+
+    /// <summary>
+    /// A publisher that publishes this message notifies that the page data has changed.
+    /// </summary>
+    public const string PAGE_DATA_CHANGED = nameof(PAGE_DATA_CHANGED);
+
+    /// <summary>
+    /// A publisher that publishes this message notifies that the route data has been updated.
+    /// </summary>
+    public const string ROUTE_DATA_UPDATED = nameof(ROUTE_DATA_UPDATED);
+
+
+    /// <summary>
+    /// A publisher that publishes this message notifies that the user's external sign-in process has completed.
+    /// When a user completes external sign-in in a separate window, this message is published to notify the app.
+    /// </summary>
+    public const string EXTERNAL_SIGN_IN_CALLBACK = nameof(EXTERNAL_SIGN_IN_CALLBACK);
+
+    /// <summary>
+    /// A publisher that publishes this message notifies that the user's consent decisions have changed, so whatever
+    /// acted on them has to act again.
+    /// </summary>
+    public const string CONSENT_CHANGED = nameof(CONSENT_CHANGED);
+}

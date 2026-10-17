@@ -1,0 +1,12 @@
+{
+    "appHost": {
+        "path": "src/Server/Boors.Server.AppHost/Boors.Server.AppHost.csproj"
+    },
+    "features": {
+        "deployCommandEnabled": true,
+        "execCommandEnabled": true,
+        "defaultWatchEnabled": true,
+        "aspireSkillsRemoteFetchEnabled": true,
+        "terminalCommandsEnabled": true
+    }
+}

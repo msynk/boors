@@ -1,0 +1,235 @@
+using System.Net;
+using System.IO.Compression;
+using System.Diagnostics.Metrics;
+using Boors.Server.Shared;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using ZiggyCreatures.Caching.Fusion;
+using ZiggyCreatures.Caching.Fusion.Serialization.SystemTextJson;
+using Boors.Server.Shared.Infrastructure.Services;
+
+namespace Microsoft.Extensions.Hosting;
+
+public static class WebApplicationBuilderExtensions
+{
+    extension<TBuilder>(TBuilder builder)
+        where TBuilder : IHostApplicationBuilder
+    {
+        public TBuilder AddServerSharedServices()
+        {
+            var services = builder.Services;
+            var configuration = builder.Configuration;
+
+            services.AddSharedProjectServices(configuration);
+
+            builder.AddServiceDefaults();
+
+            ServerSharedSettings settings = new();
+            configuration.Bind(settings);
+            services.AddSingleton(sp =>
+            {
+                return settings;
+            });
+
+            services.AddOutputCache(options =>
+            {
+                options.AddPolicy("AppResponseCachePolicy", policy =>
+                {
+                    var policyBuilder = policy.AddPolicy<AppResponseCachePolicy>();
+                }, excludeDefaultPolicy: true);
+            });
+            if (settings.ResponseCaching?.EnableCdnEdgeCaching is not false || settings.ResponseCaching?.EnableOutputCaching is not false)
+            {
+                services.AddSingleton<AspNetCore.Antiforgery.IAntiforgery, SharedResponseCacheCompatibleAntiforgery>();
+            }
+
+
+            services
+                .AddFusionCache()
+                .AsHybridCache()
+                .WithRegisteredMemoryCache()
+                .WithDefaultEntryOptions(options => options.Size = AppMemoryCache.EstimatedEntrySizeInBytes)
+                // Auto-clone hands out a copy instead of the cached instance, so code that mutates what it reads from the cache
+                // breaks here the same way it would once you scale out and values start coming back deserialized from L2.
+                // It costs a serialize/deserialize per read though (including every output cache hit, since FusionOutputCacheStore
+                // shares these options), so it stays on in development to surface those bugs and off everywhere else.
+                .WithOptions(options => options.DefaultEntryOptions.EnableAutoClone = builder.Environment.IsDevelopment())
+                .WithSystemTextJsonSerializer()
+                .WithCacheKeyPrefix("Boors:Cache:");
+
+            services.AddFusionOutputCache(); // For ASP.NET Core Output Caching with FusionCache
+
+            // Registering Microsoft's IDistributedCache here doesn't mean you have to use it in your code. It's only for libraries that might rely on it.
+            services.AddDistributedMemoryCache();
+
+            services.AddHttpContextAccessor();
+
+            services.AddResponseCompression(opts =>
+            {
+                opts.EnableForHttps = true;
+                opts.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/octet-stream"]).ToArray();
+                opts.Providers.Add<BrotliCompressionProvider>();
+                opts.Providers.Add<GzipCompressionProvider>();
+            })
+                .Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest)
+                .Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+
+            services.AddAntiforgery();
+
+            services.AddAuthorization();
+
+            return builder;
+        }
+
+        /// <summary>
+        /// Also knows as AddServiceDefaults
+        /// Adds common services for API: service discovery, resilience, health checks, and OpenTelemetry.
+        /// This project should be referenced by each service project in your solution.
+        /// To learn more about using this project, see https://aka.ms/dotnet/aspire/service-defaults
+        /// </summary>
+        private TBuilder AddServiceDefaults()
+        {
+            builder.ConfigureOpenTelemetry();
+
+            builder.Services.AddServiceDiscovery();
+
+            builder.Services.ConfigureHttpClientDefaults(http =>
+            {
+                http.ConfigureHttpClient(httpClient =>
+                {
+                    httpClient.DefaultRequestVersion = HttpVersion.Version20;
+                    httpClient.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher;
+                });
+
+                // Turn on resilience by default, but never replay an unsafe method. A retried POST is a second
+                // attempt at something the server may already have done: an authorization code redeemed twice reads
+                // as code reuse, a captcha token verified twice comes back as a duplicate, a push notification sent
+                // twice arrives twice. Retrying one is worth asking for per client (and a job-level retry, as the
+                // Cloudflare purge uses, is usually the better place for it); losing one silently is not.
+                http.AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods());
+
+                // Turn on service discovery by default
+                http.AddServiceDiscovery();
+
+                http.UseSocketsHttpHandler((handler, sp) =>
+                {
+                    handler.EnableMultipleHttp2Connections = true;
+                    handler.EnableMultipleHttp3Connections = true;
+                    handler.PooledConnectionLifetime = TimeSpan.FromMinutes(15);
+                    handler.AutomaticDecompression = DecompressionMethods.All;
+                    handler.SslOptions = new()
+                    {
+                        EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
+                    };
+                });
+            });
+
+            return builder;
+        }
+
+        private TBuilder ConfigureOpenTelemetry()
+        {
+            builder.Logging.AddOpenTelemetry(options =>
+            {
+                options.IncludeScopes = true;
+                options.IncludeFormattedMessage = true;
+                builder.Configuration.Bind("Logging:OpenTelemetry", options);
+            });
+
+            if (builder.Environment.IsDevelopment() is false)
+            {
+                builder.Logging.AddSampler<AppLoggingSampler>();
+            }
+
+            builder.Services.AddOpenTelemetry()
+                .WithMetrics(metrics =>
+                {
+                    metrics.AddAspNetCoreInstrumentation()
+                        .AddFusionCacheInstrumentation()
+                        .AddHttpClientInstrumentation()
+                        .AddRuntimeInstrumentation();
+
+                    metrics.AddMeter(Meter.Current.Name)
+                        .AddMeter("Experimental.Microsoft.Extensions.AI");
+                })
+                .WithTracing(tracing =>
+                {
+                    tracing.AddSource(ActivitySource.Current.Name)
+                        .AddSource("Experimental.Microsoft.Extensions.AI")
+                        .AddProcessor<AppOpenTelemetryProcessor>()
+                        .AddAspNetCoreInstrumentation(options =>
+                        {
+                            // Filter out Blazor static files and health checks requests.
+                            string[] toBeIgnoredSegments = ["/health",
+                                "/alive",
+                                "/_content",
+                                "/_framework"];
+
+                            options.Filter = context =>
+                            {
+                                foreach (var segment in toBeIgnoredSegments)
+                                {
+                                    if (context.Request.Path.StartsWithSegments(segment, StringComparison.OrdinalIgnoreCase))
+                                        return false;
+                                }
+
+                                return true;
+                            };
+                        })
+                        .AddHttpClientInstrumentation()
+                        .AddFusionCacheInstrumentation()
+                        .AddEntityFrameworkCoreInstrumentation(options => options.Filter = (providerName, command) => command?.CommandText?.Contains("Hangfire") is not true /* Ignore Hangfire */)
+                        .AddHangfireInstrumentation();
+                })
+                .ConfigureResource(resource =>
+                {
+                    resource
+                        .AddAzureAppServiceDetector()
+                        .AddAzureContainerAppsDetector()
+                        .AddAzureVMDetector()
+                        .AddContainerDetector()
+                        .AddHostDetector()
+                        .AddOperatingSystemDetector()
+                        .AddProcessDetector()
+                        .AddProcessRuntimeDetector()
+                        .AddService(builder.Environment.ApplicationName);
+                });
+
+            builder.AddOpenTelemetryExporters();
+
+            return builder;
+        }
+
+        private TBuilder AddOpenTelemetryExporters()
+        {
+            var useOtlpExporter = string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]) is false
+                || string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]) is false;
+
+            if (useOtlpExporter)
+            {
+                builder.Services
+                    .AddOpenTelemetry()
+                    .UseOtlpExporter();
+            }
+
+
+            return builder;
+        }
+
+        public IHealthChecksBuilder AddDefaultHealthChecks()
+        {
+            builder.Services.AddOutputCache(configureOptions: static caching =>
+                caching.AddPolicy("HealthChecks",
+                build: static policy => policy.Expire(TimeSpan.FromSeconds(10)).SetVaryByQuery([])));
+
+            return builder.Services.AddHealthChecks()
+                .AddDiskStorageHealthCheck(options => options.AddDrive(Path.GetPathRoot(Directory.GetCurrentDirectory())!, minimumFreeMegabytes: 2 * 1024), name: "binStorage", tags: ["live"]);
+        }
+    }
+}

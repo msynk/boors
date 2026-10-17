@@ -1,0 +1,25 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.4">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsAspireHost>true</IsAspireHost>
+        <EntryPointAccessibility>public</EntryPointAccessibility>
+        <UserSecretsId>95A29231-1A5A-4398-9C48-89D685C58B2B</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.Keycloak" />
+        <PackageReference Include="CommunityToolkit.Aspire.Hosting.MailPit" />
+        <PackageReference Include="Aspire.Hosting.Azure.PostgreSQL" />
+        <PackageReference Include="AspireIntegration.Hosting.RustFs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Client\Boors.Client.Web\Boors.Client.Web.csproj" />
+        <ProjectReference Include="..\..\Client\Boors.Client.Windows\Boors.Client.Windows.csproj" />
+        <ProjectReference Include="..\Boors.Server.Web\Boors.Server.Web.csproj" />
+        <ProjectReference Include="..\Boors.Server.Shared\Boors.Server.Shared.csproj" IsAspireProjectResource="false" />
+    </ItemGroup>
+
+</Project>

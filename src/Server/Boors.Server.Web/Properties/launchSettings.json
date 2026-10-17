@@ -1,0 +1,86 @@
+{
+    // [mirror] the Docker profile is kept in sync with:
+    // - src/Server/Boors.Server.Api/Properties/launchSettings.json
+    "profiles": {
+        "Boors.Server.Web": {
+            "commandName": "Project",
+            "launchBrowser": true,
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "dotnetRunMessages": true,
+            "applicationUrl": "http://localhost:5000;http://*:5000"
+        },
+        "Boors.Server.Web-Scalar": {
+            "commandName": "Project",
+            "launchBrowser": true,
+            "launchUrl": "scalar",
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "dotnetRunMessages": true,
+            "applicationUrl": "http://localhost:5000;http://*:5000"
+        },
+        "Boors.Server.Web-BlazorWebAssembly": {
+            "commandName": "Project",
+            "launchBrowser": true,
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "WebAppRender:BlazorMode": "BlazorWebAssembly"
+            },
+            "dotnetRunMessages": true,
+            "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
+            "applicationUrl": "http://localhost:5000;http://*:5000"
+        },
+        "WSL": {
+            "commandName": "WSL2",
+            "launchBrowser": true,
+            "launchUrl": "http://localhost:5000/",
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://localhost:5000;http://*:5000"
+            }
+        },
+        "Docker": {
+            "commandName": "SdkContainer",
+            "launchBrowser": true,
+            "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}/",
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                // The appsettings default for this database points at the developer's own machine ((localdb) / localhost),
+                // which is not reachable from inside the container. Add the override this profile needs, for example
+                // "ConnectionStrings__mssqldb": "Data Source=host.docker.internal;...",
+                "ASPNETCORE_HTTP_PORTS": "5000"
+            },
+            "DockerfileRunArguments": "-v C:\\DockerVolumes\\95A29231-1A5A-4398-9C48-89D685C58B2B:/container_volume",
+            "publishAllPorts": true,
+            "useSSL": false,
+            "httpPort": 5000
+        },
+        "IIS Express": {
+            "commandName": "IISExpress",
+            "launchBrowser": true,
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        "IIS": {
+            "commandName": "IIS",
+            "launchBrowser": true,
+            "environmentVariables": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        }
+    },
+    "iisSettings": {
+        "windowsAuthentication": false,
+        "anonymousAuthentication": true,
+        "iis": {
+            "applicationUrl": "http://localhost:5000/"
+        },
+        "iisExpress": {
+            "applicationUrl": "http://localhost:5000/"
+        }
+    },
+    "$schema": "http://json.schemastore.org/launchsettings.json"
+}

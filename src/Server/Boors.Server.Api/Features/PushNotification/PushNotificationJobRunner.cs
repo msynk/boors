@@ -1,0 +1,116 @@
+using AdsPush;
+using AdsPush.Abstraction;
+using System.Collections.Concurrent;
+using Hangfire.Server;
+using System.Net;
+using Boors.Shared.Infrastructure.Dtos.SignalR;
+
+namespace Boors.Server.Api.Features.PushNotification;
+
+public partial class PushNotificationJobRunner
+{
+    [AutoInject] private AppDbContext dbContext = default!;
+    [AutoInject] private IAdsPushSender adsPushSender = default!;
+    [AutoInject] private ApiServerExceptionHandler serverExceptionHandler = default!;
+    [AutoInject] private IHubContext<AppHub> hubContext = default!;
+
+    public async Task RequestPush(int[] pushNotificationSubscriptionIds,
+        PushNotificationRequest request,
+        PerformContext context = null!,
+        CancellationToken cancellationToken = default)
+    {
+        var subscriptions = await dbContext.PushNotificationSubscriptions
+            .Where(pns => pushNotificationSubscriptionIds.Contains(pns.Id))
+            .ToArrayAsync(cancellationToken);
+
+        var payload = new AdsPushBasicSendPayload()
+        {
+            Title = AdsPushText.CreateUsingString(request.Title ?? "Boors push"),
+            Detail = AdsPushText.CreateUsingString(request.Message ?? string.Empty)
+        };
+
+        if (string.IsNullOrWhiteSpace(request.Action) is false)
+        {
+            payload.Parameters.Add("action", request.Action);
+        }
+        if (string.IsNullOrWhiteSpace(request.PageUrl) is false)
+        {
+            payload.Parameters.Add("pageUrl", request.PageUrl);
+        }
+
+        int succeededItems = 0;
+        int failedItems = 0;
+        string? signalRConnectionId = null;
+        if (request.RequesterUserSessionId != null) // Instead of passing SignalRConnectionId directly, we get it from UserSessionId to have latest value at the time of job execution
+        {
+            signalRConnectionId = await dbContext.UserSessions
+                .Where(us => us.Id == request.RequesterUserSessionId)
+                .Select(us => us.SignalRConnectionId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        ConcurrentBag<(int problematicSubscriptionId, AdsPushErrorType? errorType, HttpStatusCode? responseStatusCode, Exception exp)> problems = [];
+
+        await Parallel.ForEachAsync(subscriptions, parallelOptions: new()
+        {
+            MaxDegreeOfParallelism = 10,
+            CancellationToken = cancellationToken
+        }, async (subscription, cancellationToken) =>
+        {
+            try
+            {
+                var target = subscription.Platform is "browser" ? AdsPushTarget.BrowserAndPwa
+                                    : subscription.Platform is "fcmV1" ? AdsPushTarget.Android
+                                    : subscription.Platform is "apns" ? AdsPushTarget.Ios
+                                    : throw new NotImplementedException($"Platform {subscription.Platform} is not supported.");
+
+                await adsPushSender.BasicSendAsync(target, subscription.PushChannel, payload, default);
+
+                Interlocked.Increment(ref succeededItems); // Inside Parallel.ForEachAsync simple ++ wouldn't work
+            }
+            catch (Exception exp)
+            {
+                Interlocked.Increment(ref failedItems);
+                var adsPushException = exp as AdsPushException;
+                problems.Add((subscription.Id, adsPushException?.ErrorType, adsPushException?.HttpResponse?.StatusCode, exp));
+            }
+            finally
+            {
+                try
+                {
+                    if (signalRConnectionId != null)
+                    {
+                        _ = hubContext.Clients.Client(signalRConnectionId).Publish(SharedAppMessages.BACKGROUND_JOB_PROGRESS, new BackgroundJobProgressDto()
+                        {
+                            JobId = context.BackgroundJob.Id,
+                            JobTitle = nameof(AppStrings.PushNotificationJob),
+                            TotalItems = pushNotificationSubscriptionIds.Length,
+                            SucceededItems = succeededItems,
+                            FailedItems = failedItems
+                        }, cancellationToken);
+                    }
+                }
+                catch { }
+            }
+        });
+
+        if (problems.IsEmpty is false)
+        {
+            var errorData = new Dictionary<string, object?>()
+            {
+                { "UserRelatedPush", request.UserRelatedPush },
+                { "JobId", context.BackgroundJob.Id },
+                { "TotalSubscriptions", pushNotificationSubscriptionIds.Length },
+                { "SucceededItems", succeededItems },
+                { "FailedItems", failedItems }
+            };
+
+            foreach (var (problematicSubscriptionId, errorType, responseStatusCode, exp) in problems.DistinctBy(p => new { p.errorType, p.responseStatusCode, ExceptionType = p.exp.GetType() }))
+            {
+                errorData[$"Subscription_{problematicSubscriptionId}"] = $"ErrorType: {errorType}, ResponseStatusCode: {responseStatusCode}, Exception: {exp.GetType().Name}: {exp.Message}";
+            }
+
+            serverExceptionHandler.Handle(new AggregateException("Failed to send push notifications", problems.Select(p => p.exp)).WithData(errorData));
+        }
+    }
+}

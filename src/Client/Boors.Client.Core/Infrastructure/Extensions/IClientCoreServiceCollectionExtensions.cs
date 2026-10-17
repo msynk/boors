@@ -1,0 +1,231 @@
+using Boors.Client.Core;
+using Microsoft.Extensions.Options;
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.AspNetCore.Components.WebAssembly.Services;
+using Microsoft.AspNetCore.Http.Connections;
+
+namespace Microsoft.Extensions.DependencyInjection;
+
+public static partial class IClientCoreServiceCollectionExtensions
+{
+    extension(IServiceCollection services)
+    {
+        public IServiceCollection AddClientCoreProjectServices(IConfiguration configuration)
+        {
+            // Services being registered here can get injected in client side (WebAssembly, Android, iOS, Windows and macOS) + server side (during pre-rendering and Blazor Server)
+            services.AddSharedProjectServices(configuration);
+
+            services.AddTransient<IPrerenderStateService, NoOpPrerenderStateService>();
+
+            services.AddScoped<ThemeService>();
+            services.AddScoped<CultureService>();
+            services.AddScoped<TimeZoneService>();
+            services.AddScoped<LazyAssemblyLoader>();
+            services.AddScoped<SignInModalService>();
+            services.AddScoped<IAuthTokenProvider, ClientSideAuthTokenProvider>();
+            services.AddScoped<IExternalNavigationService, DefaultExternalNavigationService>();
+            services.AddScoped<FileSaveService>();
+            services.AddScoped<ConsentService>();
+
+            if (Uri.TryCreate(configuration.GetServerAddress(), UriKind.Absolute, out var serverAddress))
+            {
+                services.AddScoped<AbsoluteServerAddressProvider>(sp => new() { GetAddress = () => serverAddress });
+            }
+            else
+            {
+                services.AddScoped<AbsoluteServerAddressProvider>(sp => new()
+                {
+                    /* Read AbsoluteServerAddressProvider's comments for more info. */
+                    GetAddress = () => sp.GetRequiredService<HttpClient>().BaseAddress!
+                });
+            }
+
+            // The following services must be unique to each app session.
+            // Defining them as singletons would result in them being shared across all users in Blazor Server and during pre-rendering.
+            // To address this, we use the AddSessioned extension method.
+            // AddSessioned applies AddSingleton in BlazorHybrid and AddScoped in Blazor WebAssembly and Blazor Server, ensuring correct service lifetimes for each environment.
+            services.AddSessioned<PubSubService>();
+            services.AddSessioned<SnackBarService>();
+            services.AddSessioned<ElevatedAccessService>();
+            services.AddSessioned<NotificationPreferenceService>();
+            services.AddSessioned<ILocalHttpServer, NoOpLocalHttpServer>();
+            services.AddSessioned<ITelemetryContext, AppTelemetryContext>();
+            services.AddSessioned<AuthenticationStateProvider>(sp =>
+            {
+                var authenticationStateProvider = ActivatorUtilities.CreateInstance<AuthManager>(sp);
+                authenticationStateProvider.OnInit();
+                return authenticationStateProvider;
+            });
+            services.AddSessioned(sp => (AuthManager)sp.GetRequiredService<AuthenticationStateProvider>());
+
+            services.AddSingleton(sp => sp.GetRequiredService<IOptions<ClientCoreSettings>>().Value);
+
+            services.AddOptions<ClientCoreSettings>()
+                .Bind(configuration)
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
+
+            services.AddBitButilServices();
+
+            services.AddBitBlazorUIExtrasServices(trySingleton: AppPlatform.IsBlazorHybrid, accentColor: options =>
+            {
+                options.FirstPaintStrategy = BitAccentColorFirstPaintStrategy.StoredCss;
+                options.Persistence = BitAccentColorPersistence.All;
+            });
+
+            // Read HttpMessageHandlersChainFactory comments for more info.
+            services.AddScoped<HttpMessageHandlersChainFactory>(serviceProvider => transportHandler =>
+            {
+                transportHandler ??= AppPlatform.IsBrowser ? new HttpClientHandler() : new SocketsHttpHandler() // SocketsHttpHandler doesn't work in BlazorWebAssembly.
+                {
+                    EnableMultipleHttp2Connections = true,
+                    EnableMultipleHttp3Connections = true,
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+                    AutomaticDecompression = System.Net.DecompressionMethods.All,
+                    SslOptions = new()
+                    {
+                        EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13
+                    }
+                };
+
+                var constructedHttpMessageHandler = ActivatorUtilities.CreateInstance<LoggingDelegatingHandler>(serviceProvider,
+                            [ActivatorUtilities.CreateInstance<CacheDelegatingHandler>(serviceProvider,
+                            [ActivatorUtilities.CreateInstance<RequestHeadersDelegatingHandler>(serviceProvider,
+                            [ActivatorUtilities.CreateInstance<AuthDelegatingHandler>(serviceProvider,
+                            [ActivatorUtilities.CreateInstance<RetryDelegatingHandler>(serviceProvider,
+                            [ActivatorUtilities.CreateInstance<ExceptionDelegatingHandler>(serviceProvider, [transportHandler!])])])])])]);
+                return constructedHttpMessageHandler;
+            });
+
+            services.AddBesqlDbContextFactory<AppOfflineDbContext>((sp, optionsBuilder) =>
+            {
+                var isRunningInsideDocker = Directory.Exists("/container_volume"); // Blazor Server - Docker (It's supposed to be a mounted volume named /container_volume)
+                var dirPath = isRunningInsideDocker ? "/container_volume"
+                                                    : AppPlatform.IsBlazorHybrid ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "95A29231-1A5A-4398-9C48-89D685C58B2B")
+                                                    : Directory.GetCurrentDirectory(); // Blazor server (Non docker Linux, macOS or Windows) OR Blazor WASM
+
+                dirPath = Path.Combine(dirPath, "App_Data");
+
+                Directory.CreateDirectory(dirPath);
+
+                var dbPath = Path.Combine(dirPath, "AppOffline.db");
+
+                optionsBuilder.UseSqlite($"Data Source={dbPath}", dbOptions =>
+                {
+
+                });
+
+                optionsBuilder.EnableSensitiveDataLogging(AppEnvironment.IsDevelopment())
+                        .EnableDetailedErrors(AppEnvironment.IsDevelopment());
+
+            }
+            , dbContextInitializer: async (_, dbContext) =>
+            {
+                if (AppEnvironment.IsDevelopment() is false && dbContext.Model.GetType() == typeof(EntityFrameworkCore.Metadata.RuntimeModel))
+                    throw new InvalidOperationException("AppOfflineDbContext has not been optimized. Run 'dnx dotnet-ef@10.0.13 -- dbcontext optimize --context AppOfflineDbContext' before publishing, and re-run it after every model or migration change. See Boors.Client.Core/Infrastructure/Data/README.md.");
+
+                await Task.Run(async () => await dbContext.Database.MigrateAsync());
+            }
+            , lifetime: ServiceLifetime.Scoped);
+            services.AddScoped<SyncService>();
+
+
+            services.AddTypedHttpClients(); // See Boors.Shared/Controllers/Readme.md
+
+            services.AddScoped<IRetryPolicy, SignalRInfiniteRetryPolicy>();
+            services.AddSessioned(sp =>
+            {
+                var authManager = sp.GetRequiredService<AuthManager>();
+                var authTokenProvider = sp.GetRequiredService<IAuthTokenProvider>();
+                var absoluteServerAddressProvider = sp.GetRequiredService<AbsoluteServerAddressProvider>();
+
+                // The X-Origin is already has been set while Client.Web, Client.Maui, Client.Windows and Server.Web
+                var xOrigin = sp.GetRequiredService<HttpClient>().DefaultRequestHeaders.Single(h => h.Key is "X-Origin").Value.Single();
+
+                var hubConnection = new HubConnectionBuilder()
+                    .WithStatefulReconnect()
+                    .AddJsonProtocol(options =>
+                    {
+                        foreach (var chain in sp.GetRequiredService<JsonSerializerOptions>().TypeInfoResolverChain)
+                        {
+                            options.PayloadSerializerOptions.TypeInfoResolverChain.Add(chain);
+                        }
+                    })
+                    .WithAutomaticReconnect(sp.GetRequiredService<IRetryPolicy>())
+                    .WithUrl(new Uri(absoluteServerAddressProvider.GetAddress(), "app-hub?origin=" + Uri.EscapeDataString(xOrigin)), options =>
+                    {
+                        options.SkipNegotiation = false; // Required for Azure SignalR.
+                        options.Transports = HttpTransportType.WebSockets;
+                        // Avoid enabling long polling or Server-Sent Events. Focus on resolving the issue with WebSockets instead.
+                        // WebSockets should be enabled on services like IIS or Cloudflare CDN, offering significantly better performance.
+                        options.HttpMessageHandlerFactory = httpClientHandler => sp.GetRequiredService<HttpMessageHandlersChainFactory>().Invoke(httpClientHandler);
+                        options.AccessTokenProvider = async () =>
+                        {
+                            return await authManager.GetFreshAccessToken(requestedBy: nameof(HubConnection),
+                                ignoreTransientException: true); // ignoreTransientException: If the client is disconnected and the access token is expired, this code will execute repeatedly every few seconds, causing an annoying error message to be displayed to the user.
+                        };
+                    })
+                    .Build();
+                return hubConnection;
+            });
+
+            return services;
+        }
+
+        /// <summary>
+        /// Blazor Server creates one scope for each connected user's client app.
+        /// Blazor WebAssembly has only one scope for the client app.
+        /// MAUI + Blazor Hybrid would create two scopes for the client app: one for the native part and one for the Blazor's WebView.
+        /// So, in Blazor Hybrid, we register sessioned services as singletons to share them between the two scopes.
+        /// And in Blazor Server we **MUST** register sessioned services as scoped to avoid sharing them between different users.
+        /// And in Blazor WebAssembly it doesn't matter if we register sessioned services as scoped or singleton because there's only one scope per client app.
+        /// </summary>
+        internal IServiceCollection AddSessioned<TService, TImplementation>()
+            where TImplementation : class, TService
+            where TService : class
+        {
+            if (AppPlatform.IsBlazorHybrid)
+            {
+                return services.AddSingleton<TService, TImplementation>();
+            }
+            else
+            {
+                return services.AddScoped<TService, TImplementation>();
+            }
+        }
+
+        /// <summary>
+        /// <inheritdoc cref="AddSessioned{TService, TImplementation}(IServiceCollection)"/>
+        /// </summary>
+        internal IServiceCollection AddSessioned<TService>(Func<IServiceProvider, TService> implementationFactory)
+            where TService : class
+        {
+            if (AppPlatform.IsBlazorHybrid)
+            {
+                services.Add(ServiceDescriptor.Singleton(implementationFactory));
+            }
+            else
+            {
+                services.Add(ServiceDescriptor.Scoped(implementationFactory));
+            }
+
+            return services;
+        }
+
+        /// <summary>
+        /// <inheritdoc cref="AddSessioned{TService, TImplementation}(IServiceCollection)"/>
+        /// </summary>
+        internal void AddSessioned<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TService>()
+            where TService : class
+        {
+            if (AppPlatform.IsBlazorHybrid)
+            {
+                services.AddSingleton<TService, TService>();
+            }
+            else
+            {
+                services.AddScoped<TService, TService>();
+            }
+        }
+    }
+}

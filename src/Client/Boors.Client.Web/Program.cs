@@ -1,0 +1,71 @@
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Bit.Butil;
+
+namespace Boors.Client.Web;
+
+public static partial class Program
+{
+    public static async Task Main(string[] args)
+    {
+        var builder = WebAssemblyHostBuilder.CreateDefault(args);
+
+
+        AppEnvironment.Set(builder.HostEnvironment.Environment);
+
+        builder.Configuration.AddClientConfigurations(clientEntryAssemblyName: "Boors.Client.Web");
+
+        if (Environment.GetEnvironmentVariable("__BLAZOR_WEBASSEMBLY_WAIT_FOR_ROOT_COMPONENTS") != "true")
+        {
+            AppPlatform.IsWasmStandalone = true;
+
+            builder.RootComponents.Add<HeadOutlet>("head::after");
+            builder.RootComponents.Add<Routes>("#app-container");
+        }
+
+        builder.ConfigureServices();
+
+        var host = builder.Build();
+
+        host.Services.GetService<IStartupValidator>()?.Validate();
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => LogException(e.ExceptionObject, reportedBy: nameof(AppDomain.UnhandledException), host);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            LogException(e.Exception, nameof(TaskScheduler.UnobservedTaskException), host);
+            e.SetObserved();
+        };
+
+        if (CultureInfoManager.InvariantGlobalization is false)
+        {
+            var cultureCookie = CultureService.ExtractUiCulture(await host.Services.GetRequiredService<Cookie>().GetValue(CultureService.CultureCookieName));
+
+            var navigationManager = host.Services.GetRequiredService<NavigationManager>();
+
+            var culture = new Uri(navigationManager.Uri).GetCulture() ?? // 1- Culture query string OR Route data request culture
+                          cultureCookie ?? // 2- User settings
+                          CultureInfo.CurrentUICulture.Name; // 3- OS/Browser settings
+
+            CultureInfoManager.SetCurrentCulture(culture);
+        }
+
+        await host.RunAsync();
+    }
+
+    private static void LogException(object? error, string reportedBy, WebAssemblyHost host)
+    {
+        if (host.Services is IServiceProvider services && error is Exception exp)
+        {
+            services.GetRequiredService<ClientExceptionHandlerBase>().Handle(exp, parameters: new()
+            {
+                { nameof(reportedBy), reportedBy }
+            }, displayKind: AppEnvironment.IsDevelopment() ? ExceptionDisplayKind.NonInterrupting : ExceptionDisplayKind.None);
+        }
+        else
+        {
+            _ = System.Console.Error.WriteLineAsync(error?.ToString() ?? "Unknown error");
+        }
+    }
+}

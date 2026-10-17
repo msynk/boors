@@ -1,0 +1,17 @@
+@inherits AppComponentBase;
+
+<section>
+    <BitNavBar FullWidth TItem="BitNavBarOption">
+
+        <BitNavBarOption Text="@Localizer[nameof(AppStrings.Home)]" IconName="@BitIconName.Home" Url="@PageUrls.Home" />
+
+        <AuthorizeView Policy="@AppFeatures.Todo.Todo_Manage_Self">
+            <BitNavBarOption Text="@Localizer[nameof(AppStrings.OfflineTodoTitle)]" IconName="@BitIconName.ToDoLogoOutline" Url="@PageUrls.OfflineTodo" />
+        </AuthorizeView>
+
+
+        <BitNavBarOption Text="@Localizer[nameof(AppStrings.Terms)]" IconName="@BitIconName.EntityExtraction" Url="@PageUrls.Terms" />
+
+
+    </BitNavBar>
+</section>

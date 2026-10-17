@@ -1,0 +1,11 @@
+@inherits AppComponentBase
+
+<BitImage Src="@EffectiveSrc"
+          Alt="@Alt"
+          Width="@Width"
+          Class="@Class"
+          StartVisible>
+    <ErrorTemplate>
+        <img alt="@Alt" src="@PlaceholderSrc" style="width:100%;height:auto;display:block;" />
+    </ErrorTemplate>
+</BitImage>
