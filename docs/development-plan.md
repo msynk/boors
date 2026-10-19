@@ -1,6 +1,6 @@
 # Boors — Iran Stock Market Analysis App: Development Plan
 
-Version 2.3 · 2026-10-17 (25 Mehr 1405) — v2.1 recorded Phase 0; v2.2 Phase 1 (DuckDB market store §4, findings §9.4, status §9.2); v2.3 closes Phase 1 and records the Phase 2 backend (§9.3)
+Version 2.4 · 2026-10-17 (25 Mehr 1405) — v2.1 recorded Phase 0; v2.2 Phase 1 (DuckDB market store §4, findings §9.4, status §9.2); v2.3 closed Phase 1 and recorded the Phase 2 backend; v2.4 records the first Phase 2 pages (§9.3)
 Supersedes v1.0 (same day). Basis:
 - Round 1: [reports/Iran stock market app feasibility.md](../reports/Iran%20stock%20market%20app%20feasibility.md)
 - Round 2: [reports/Iran stock app plan round 2.md](../reports/Iran%20stock%20app%20plan%20round%202.md) (stack verification, Iran infrastructure, field-level data specs, UX benchmark, Mehr 1405 rules)
@@ -610,11 +610,9 @@ Durations assume **one full-time developer**; multiply by about 2 for part-time.
 
 Live state on the dev machine: 3,298 instruments, ~60 instruments backfilled (the full ~1,000 takes ~35 min with `boors collect backfill`), today's session appended, 27.5k index rows, 27.7k macro rows, 516 funds, 400 messages. 104 unit/integration tests pass.
 
-### 9.3 Phase 2 status (2026-10-17): backend done, pages pending
+### 9.3 Phase 2 status (2026-10-17): backend and first pages done
 
-Phase 2 is split. The read side the pages need is built and tested. The pages themselves wait for two things:
-- The bit platform MCP tools, which the project's AGENTS.md requires before writing Bit.BlazorUI code. They load when Claude Code is restarted in the repository.
-- A way to run the app: Docker/Podman for Aspire, or a local PostgreSQL.
+The read side and the first five pages are built. The app itself has not been run end to end yet: that needs Docker/Podman for Aspire or a local PostgreSQL. The pages were checked instead by bUnit render tests with faked controllers and by screenshots of their rendered markup with the real Bit.BlazorUI and app stylesheets, in light, dark and Persian RTL.
 
 | Deliverable | Status |
 |---|---|
@@ -626,9 +624,25 @@ Phase 2 is split. The read side the pages need is built and tested. The pages th
 | Command palette search | **Done:** `MarketAnalytics.Search` (exact symbol, then prefix, then name; primary listings first). |
 | API | **Done, compile-verified:** `IMarketController` (overview, breadth, sectors, movers, screen, search, market watch POST) and `IInstrumentController` (metrics, bars, flows, events, shareholders, letters, messages) with shared DTOs, Mapperly mapping, JSON source-gen registration and generated client proxies. |
 | CLI preview | `boors market overview | breadth | sectors | movers <kind> | screen <kind> | metrics <symbol> | search <text> | watch --filter "…"` shows the same numbers in the terminal. |
-| Pages (overview, market watch, symbol workspace with Lightweight Charts, sectors, screeners, watchlists, command palette, Jalali/RTL, dark mode, PWA) | **Not started**, for the reasons above. |
+| Market overview page (`/market`) | **Done.** KPI tiles (indices, TEDPIX in dollars, value traded, breadth, queues, individual flow, dollar, coin); TEDPIX 1-year line with a rial/dollar toggle (dollar view indexed to 100, never a dual axis); 20-session 100% breadth bars; sector returns as sorted diverging horizontal bars; movers grid with five lists. |
+| Market watch page (`/market/watch`) | **Done.** TSETMC filter box with nine example filters, class groups (shares, funds, rights, all), traded-only switch, virtualized grid with frozen symbol column, quick search, CSV/Excel export, queue tags, per-instrument filter errors listed and syntax errors shown next to the box. |
+| Symbol workspace (`/symbol/{insCode}`) | **Done.** Header, 1w–1y and USD returns, 52-week range, market cap, 20-day value and flow, buyer power with percentile; candlesticks (raw or point-in-time adjusted) with value and individual-flow panes; 1M–5Y ranges; tabs for capital events, shareholders, Codal letters (links out) and supervisor messages. |
+| Screens page (`/market/screens`) | **Done** for the four basic screens, each with a one-line description and a reminder that a rank is not a signal. |
+| Data-health page (`/market/health`) | **Done.** Datasets, last runs, source reachability and buttons that queue each collection job; behind the Operations_View policy. |
+| Symbol search | **Done** as a search box on every market page (suggestions from `Search`, Enter opens the best match). A keyboard command palette is still to do. |
+| Navigation | **Done:** a "Market" group in the side menu; data health only for operators. |
+| Jalali/RTL, dark mode | **Done for these pages.** Dates are Jalali under the fa culture (the template already gives fa the Persian calendar). Signed percentages are isolated as left-to-right runs so RTL does not reorder them. Charts stay left to right in every culture, as on TSETMC. |
+| Tests | 5 bUnit tests in `src/Tests/Features/Market` (overview with data and empty, market watch with filter errors and a syntax error, symbol workspace with Codal links, screens and health). They pass in a scratch harness; inside `Boors.Tests` they need Docker because the assembly initializer starts Aspire. |
+| Watchlists, command palette, sector page, treemap, synchronized crosshairs, Vazirmatn font, Persian digits, colour-blind preset | **Not started.** Next in this phase. |
 
-Live sample (2026-10-17): TEDPIX 8,265,157 (−1.91%); in dollar terms −3.37%; equities 30.8 hemat traded; 146 up / 604 down; 71 buy queues (2.19 hemat) and 143 sell queues (1.59 hemat); individual net flow −6.8 hemat. فولاد: +114% over one year in rials, −11.8% in free-market dollars. Tests: 115 passing.
+**Chart library deviation.** §7.1 names Lightweight Charts and ECharts. The first pages use **BitChart** (Bit.BlazorUI.Extras, native SVG, theme tokens, no JavaScript chart runtime) for everything, including candlesticks built from floating bars plus error-bar wicks. That covers the overview and symbol needs today. Lightweight Charts stays the plan for the live intraday chart (P3) if BitChart's zoom/pan and redraw speed are not enough at that point, and ECharts for the treemap and calendar heatmap.
+
+**BitChart behaviours found while checking the screenshots** (worth reporting upstream):
+- With `IndexAxis = Y` the `"x"` scale stays the category scale and is drawn vertically, and `"y"` stays the value scale. Chart.js swaps them. Configuring `"x"` as linear, as Chart.js expects, leaves the chart empty.
+- With an RTL page direction the SVG axis labels inherit `direction: rtl`, their anchors flip, and the y-axis labels overlap the plot. The pages force `direction: ltr` on the chart SVG.
+- Animations run in C# and do not reliably finish under bUnit, so render tests must not assert on bar geometry.
+
+Live sample (2026-10-17): TEDPIX 8,265,157 (−1.91%); in dollar terms −3.37%; equities 30.8 hemat traded; 146 up / 604 down; 71 buy queues (2.19 hemat) and 143 sell queues (1.59 hemat); individual net flow −6.8 hemat. فولاد: +114% over one year in rials, −11.8% in free-market dollars. Tests: 115 market-data tests passing, plus the 5 page tests.
 
 ### 9.4 Data findings from Phase 1 (live, 2026-10-17)
 

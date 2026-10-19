@@ -1,0 +1,14 @@
+@inherits AppComponentBase
+
+@* Find an instrument by symbol or name and open its workspace. *@
+<BitSearchBox @bind-Value="text"
+              Immediate
+              DebounceTime="300"
+              MinSuggestTriggerChars="1"
+              MaxSuggestCount="10"
+              FixedCalloutWidth
+              Placeholder="@Localizer["Symbol or company name"]"
+              SuggestItems="suggestions"
+              OnChange="WrapHandled(async (string? value) => await LoadSuggestions(value))"
+              OnSearch="WrapHandled(async (string? value) => await Open(value))"
+              Class="symbol-search" />

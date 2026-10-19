@@ -3,6 +3,9 @@ namespace Boors.Shared.Features.Market;
 // Read models for the workstation pages. They mirror Boors.Market.Analytics records (mapped with Mapperly on the
 // server); prices and values are rials, percentages are percent (2.5 = 2.5%), fractions are 0–1.
 
+/// <summary>One point of a daily series (an index level, the free-market dollar...).</summary>
+public record SeriesPointDto(DateOnly Date, decimal Value);
+
 public record IndexMoveDto(long InsCode, string Name, decimal Value, double? ChangePercent);
 
 public record MacroQuoteDto(string Series, DateOnly Date, decimal Value, double? ChangePercent);

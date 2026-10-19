@@ -1,0 +1,15 @@
+@* A headline number: caption, value, and an optional signed change underneath (stat tile). *@
+<BitCard Class="kpi-tile" FullWidth>
+    <BitStack Gap="0.25rem">
+        <BitText Typography="BitTypography.Caption1" Color="BitColor.SecondaryForeground">@Caption</BitText>
+        <BitText Typography="BitTypography.H5" Numeric Color="ValueColor">@Value</BitText>
+        @if (ChangeText is not null)
+        {
+            <BitText Typography="BitTypography.Caption1" Color="ChangeColor">@ChangeText</BitText>
+        }
+        @if (Note is not null)
+        {
+            <BitText Typography="BitTypography.Caption2" Color="BitColor.TertiaryForeground">@Note</BitText>
+        }
+    </BitStack>
+</BitCard>

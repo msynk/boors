@@ -1,0 +1,160 @@
+@attribute [Route(PageUrls.Symbol + "/{InsCode:long}")]
+@attribute [Route("{culture?}" + PageUrls.Symbol + "/{InsCode:long}")]
+@attribute [Authorize]
+@inherits AppPageBase
+
+<AppPageData Title="@(metrics?.Symbol ?? Localizer["Symbol"].Value)" PageTitle="@(metrics is null ? Localizer["Symbol"].Value : $"{metrics.Symbol} · {metrics.Name}")" />
+
+<section>
+    <BitStack Gap="1rem" HorizontalAlign="BitAlignment.Stretch">
+        <BitStack Horizontal Wrap VerticalAlign="BitAlignment.Center" Gap="0.75rem">
+            @if (metrics is not null)
+            {
+                <BitText Typography="BitTypography.H4">@metrics.Symbol</BitText>
+                <BitText Typography="BitTypography.Subtitle1" Color="BitColor.SecondaryForeground">@metrics.Name</BitText>
+                <BitTag Size="BitSize.Small" Text="@MarketFormat.ClassName(metrics.InstrumentClass, Localizer)" />
+                @if (metrics.SectorName is not null)
+                {
+                    <BitTag Size="BitSize.Small" Variant="BitVariant.Outline" Text="@metrics.SectorName" />
+                }
+            }
+            <BitSpacer />
+            <SymbolSearch />
+        </BitStack>
+
+        @if (isLoading)
+        {
+            <LoadingComponent />
+        }
+        else if (metrics is null)
+        {
+            <BitMessage Color="BitColor.Warning">@Localizer["This instrument has no data yet."]</BitMessage>
+        }
+        else
+        {
+            <div class="headline">
+                <BitText Typography="BitTypography.H3" Class="price">@MarketFormat.Price(metrics.Close)</BitText>
+                <BitText Typography="BitTypography.H6" Color="MarketFormat.ChangeColor(metrics.ChangePercent)">@MarketFormat.Change(metrics.ChangePercent)</BitText>
+                <BitText Typography="BitTypography.Body2" Color="BitColor.SecondaryForeground">
+                    @MarketFormat.Date(metrics.AsOf) · @MarketFormat.DayStatus(metrics.DayStatus, Localizer)
+                </BitText>
+            </div>
+
+            <div class="kpi-grid">
+                @foreach (var (key, label) in returnWindows)
+                {
+                    var value = metrics.Returns.GetValueOrDefault(key);
+                    <KpiTile Caption="@label" Value="@MarketFormat.FractionChange(value)" ValueColor="MarketFormat.ChangeColor(value * 100)" />
+                }
+                <KpiTile Caption="@Localizer["1 year in free-market dollars"]" Value="@MarketFormat.FractionChange(metrics.UsdReturn1Year)" ValueColor="MarketFormat.ChangeColor(metrics.UsdReturn1Year * 100)" />
+                <KpiTile Caption="@Localizer["52-week range (adjusted)"]" Value="@($"{MarketFormat.Price(metrics.Low52Week)} – {MarketFormat.Price(metrics.High52Week)}")"
+                         Note="@($"{Localizer["From the high"]}: {MarketFormat.Change(metrics.FromHigh52WeekPercent)}")" />
+                <KpiTile Caption="@Localizer["Market cap (hemat)"]" Value="@MarketFormat.Hemat(metrics.MarketCap)" />
+                <KpiTile Caption="@Localizer["Average value, 20 sessions (billion toman)"]" Value="@MarketFormat.BillionToman(metrics.AverageValue20)" />
+                <KpiTile Caption="@Localizer["Individual net flow, 20 sessions (billion toman)"]" Value="@MarketFormat.BillionToman(metrics.IndividualNetFlow20)" ValueColor="MarketFormat.FlowColor(metrics.IndividualNetFlow20)" ChangeColor="MarketFormat.FlowColor(metrics.IndividualNetFlow20)"
+                         ChangeText="@(metrics.IndividualNetFlow20 is > 0 ? Localizer["Inflow"].Value : metrics.IndividualNetFlow20 is < 0 ? Localizer["Outflow"].Value : null)" />
+                <KpiTile Caption="@Localizer["Buyer power"]" Value="@MarketFormat.Ratio(metrics.BuyerPower)"
+                         Note="@(metrics.BuyerPowerPercentile is { } p ? $"{Localizer["Percentile vs. its own year"]}: {p * 100:N0}" : null)"
+                         ChangeText="@($"{Localizer["Per-capita buy / sell (million toman)"]}: {MarketFormat.MillionToman(metrics.PerCapitaBuy)} / {MarketFormat.MillionToman(metrics.PerCapitaSell)}")"
+                         ChangeColor="BitColor.SecondaryForeground" />
+            </div>
+
+            <BitCard FullWidth>
+                <BitStack Gap="0.75rem">
+                    <BitStack Horizontal Wrap VerticalAlign="BitAlignment.Center" Gap="0.75rem">
+                        <BitButtonGroup Toggle FixedToggle Variant="BitVariant.Outline" Size="BitSize.Small" Items="ranges"
+                                        @bind-ToggleKey="range" @bind-ToggleKey:after="WrapHandled(LoadSeries)" />
+                        <BitSpacer />
+                        <BitToggle Label="@Localizer["Adjusted for capital increases and dividends"]" Inline @bind-Value="adjusted" @bind-Value:after="WrapHandled(BuildCandles)" />
+                    </BitStack>
+                    @if (bars.Count == 0)
+                    {
+                        <BitText Color="BitColor.SecondaryForeground">@Localizer["No trades in this period."]</BitText>
+                    }
+                    else
+                    {
+                        <BitChart Config="candleChart" Height="360px" AriaLabel="@Localizer["Daily prices"]" />
+                        <BitText Typography="BitTypography.Caption1" Color="BitColor.SecondaryForeground">@Localizer["Value traded (billion toman)"]</BitText>
+                        <BitChart Config="valueChart" Height="140px" AriaLabel="@Localizer["Value traded per day"]" />
+                        <BitText Typography="BitTypography.Caption1" Color="BitColor.SecondaryForeground">@Localizer["Individual net flow (billion toman)"]</BitText>
+                        <BitChart Config="flowChart" Height="140px" AriaLabel="@Localizer["Individual net money flow per day"]" />
+                    }
+                </BitStack>
+            </BitCard>
+
+            <BitCard FullWidth>
+                <BitPivot>
+                    <BitPivotItem HeaderText="@Localizer["Capital events"]" ItemCount="events.Count">
+                        <BitDataGrid Items="events" Strings="DataGridStrings" Direction="MarketFormat.Direction">
+                            <BitDataGridColumn Property="e => e.Date" Title="@Localizer["Date"]">
+                                <Template Context="e">@MarketFormat.Date(e.Date)</Template>
+                            </BitDataGridColumn>
+                            <BitDataGridColumn Property="e => e.Kind" Title="@Localizer["Event"]">
+                                <Template Context="e">@(e.Kind == "share_change" ? Localizer["Share count change"] : Localizer["Price adjustment"])</Template>
+                            </BitDataGridColumn>
+                            <BitDataGridColumn Property="e => e.Factor" Title="@Localizer["Factor"]" Format="N4" Align="BitDataGridColumnAlign.Right" />
+                            <BitDataGridColumn Property="e => e.SharesBefore" Title="@Localizer["Shares before"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                            <BitDataGridColumn Property="e => e.SharesAfter" Title="@Localizer["Shares after"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                            <BitDataGridColumn Property="e => e.Source" Title="@Localizer["Source"]" />
+                        </BitDataGrid>
+                    </BitPivotItem>
+                    <BitPivotItem HeaderText="@Localizer["Shareholders"]" ItemCount="shareholders.Count">
+                        <BitDataGrid Items="shareholders" Strings="DataGridStrings" Direction="MarketFormat.Direction">
+                            <BitDataGridColumn Property="s => s.HolderName" Title="@Localizer["Holder"]" />
+                            <BitDataGridColumn Property="s => s.Percent" Title="@Localizer["Percent"]" Format="N2" Align="BitDataGridColumnAlign.Right" />
+                            <BitDataGridColumn Property="s => s.Shares" Title="@Localizer["Shares"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                            <BitDataGridColumn Property="s => s.ChangeAmount" Title="@Localizer["Change"]" Align="BitDataGridColumnAlign.Right">
+                                <Template Context="s">
+                                    <BitText Typography="BitTypography.Body2" Numeric Color="MarketFormat.FlowColor(s.ChangeAmount)">@(s.ChangeAmount == 0 ? "–" : s.ChangeAmount.ToString("+#,0;-#,0", CultureInfo.CurrentCulture))</BitText>
+                                </Template>
+                            </BitDataGridColumn>
+                            <BitDataGridColumn Property="s => s.SnapshotDate" Title="@Localizer["As of"]">
+                                <Template Context="s">@MarketFormat.Date(s.SnapshotDate)</Template>
+                            </BitDataGridColumn>
+                        </BitDataGrid>
+                    </BitPivotItem>
+                    <BitPivotItem HeaderText="@Localizer["Codal disclosures"]" ItemCount="letters.Count">
+                        <BitStack Gap="0.25rem" Class="feed">
+                            @foreach (var letter in letters)
+                            {
+                                <div class="feed-item">
+                                    <BitText Typography="BitTypography.Caption1" Color="BitColor.SecondaryForeground">
+                                        @(letter.PublishedAt is { } at ? MarketFormat.Date(DateOnly.FromDateTime(at.LocalDateTime)) : "–") · @letter.LetterCode
+                                    </BitText>
+                                    <BitLink Href="@letter.ReportUrl" Target="_blank" Rel="BitLinkRels.NoOpener | BitLinkRels.NoReferrer">@letter.Title</BitLink>
+                                    @if (letter.HasExcel && letter.ExcelUrl is not null)
+                                    {
+                                        <BitLink Href="@letter.ExcelUrl" Target="_blank" Rel="BitLinkRels.NoOpener | BitLinkRels.NoReferrer" Class="excel">Excel</BitLink>
+                                    }
+                                </div>
+                            }
+                            @if (letters.Count == 0)
+                            {
+                                <BitText Color="BitColor.SecondaryForeground">@Localizer["No disclosures collected yet."]</BitText>
+                            }
+                        </BitStack>
+                    </BitPivotItem>
+                    <BitPivotItem HeaderText="@Localizer["Supervisor messages"]" ItemCount="messages.Count">
+                        <BitStack Gap="0.25rem" Class="feed">
+                            @foreach (var message in messages)
+                            {
+                                <div class="feed-item">
+                                    <BitText Typography="BitTypography.Caption1" Color="BitColor.SecondaryForeground">@MarketFormat.Date(message.Date) · @message.Kind</BitText>
+                                    <BitText Typography="BitTypography.Body2"><b>@message.Title</b></BitText>
+                                    @if (!string.IsNullOrWhiteSpace(message.Body))
+                                    {
+                                        <BitText Typography="BitTypography.Body2">@message.Body</BitText>
+                                    }
+                                </div>
+                            }
+                            @if (messages.Count == 0)
+                            {
+                                <BitText Color="BitColor.SecondaryForeground">@Localizer["No supervisor messages for this symbol."]</BitText>
+                            }
+                        </BitStack>
+                    </BitPivotItem>
+                </BitPivot>
+            </BitCard>
+        }
+    </BitStack>
+</section>

@@ -1,0 +1,43 @@
+@attribute [Route(PageUrls.MarketScreens)]
+@attribute [Route("{culture?}" + PageUrls.MarketScreens)]
+@attribute [Authorize]
+@inherits AppPageBase
+
+<AppPageData Title="@Localizer["Screens"]" PageTitle="@Localizer["Screens"]" />
+
+<section>
+    <BitStack Gap="1rem" HorizontalAlign="BitAlignment.Stretch">
+        <BitPivot SelectedKey="@kind" SelectedKeyChanged="WrapHandled(async (string key) => await Load(key))" HeaderOnly>
+            @foreach (var screen in screens)
+            {
+                <BitPivotItem Key="@screen.Key" HeaderText="@screen.Title" />
+            }
+        </BitPivot>
+
+        @if (screens.FirstOrDefault(s => s.Key == kind) is { } current)
+        {
+            <BitText Typography="BitTypography.Body2" Color="BitColor.SecondaryForeground">@current.Description</BitText>
+        }
+
+        <BitDataGrid Items="rows" Strings="DataGridStrings" Direction="MarketFormat.Direction" Loading="isLoading"
+                     ShowExcelExport ShowCsvExport AriaLabel="@Localizer["Screen results"]"
+                     OnRowClick="(ScreenRowDto r) => OpenSymbol(r.InsCode)">
+            <BitDataGridColumn Title="#" Width="3.5rem" Align="BitDataGridColumnAlign.Right" Sortable="false">
+                <Template Context="r">@(rows.IndexOf(r) + 1)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="r => r.Symbol" Title="@Localizer["Symbol"]" Width="7rem" />
+            <BitDataGridColumn Property="r => r.Name" Title="@Localizer["Name"]" />
+            <BitDataGridColumn Property="r => r.InstrumentClass" Title="@Localizer["Class"]" Width="9rem">
+                <Template Context="r">@MarketFormat.ClassName(r.InstrumentClass, Localizer)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="r => r.Score" Title="@Localizer["Score"]" Align="BitDataGridColumnAlign.Right" Width="8rem">
+                <Template Context="r">@FormatScore(r.Score)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="r => r.Observations" Title="@Localizer["Sessions used"]" Align="BitDataGridColumnAlign.Right" Width="7rem" />
+        </BitDataGrid>
+
+        <BitText Typography="BitTypography.Caption1" Color="BitColor.SecondaryForeground">
+            @Localizer["Screens rank equities by one factor using adjusted, point-in-time data. A rank is a starting point for research, not a buy or sell signal."]
+        </BitText>
+    </BitStack>
+</section>

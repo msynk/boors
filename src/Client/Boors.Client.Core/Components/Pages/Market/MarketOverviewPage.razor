@@ -1,0 +1,120 @@
+@attribute [Route(PageUrls.MarketOverview)]
+@attribute [Route("{culture?}" + PageUrls.MarketOverview)]
+@attribute [Authorize]
+@inherits AppPageBase
+
+<AppPageData Title="@Localizer["Market overview"]" PageTitle="@Localizer["Market overview"]" />
+
+<section>
+    <BitStack Gap="1rem" HorizontalAlign="BitAlignment.Stretch">
+        <BitStack Horizontal Wrap VerticalAlign="BitAlignment.Center" Gap="0.75rem">
+            <BitText Typography="BitTypography.H5">
+                @Localizer["Session"] @MarketFormat.Date(overview?.Session)
+            </BitText>
+            <BitSpacer />
+            <SymbolSearch />
+        </BitStack>
+
+        @if (isLoading)
+        {
+            <LoadingComponent />
+        }
+        else if (overview is null)
+        {
+            <BitMessage Color="BitColor.Info">
+                @Localizer["No market data yet. Run the collection jobs (boors collect all) or enable MarketData:Collect on the server."]
+            </BitMessage>
+        }
+        else
+        {
+            <div class="kpi-grid">
+                @foreach (var index in overview.Indices)
+                {
+                    <KpiTile Caption="@index.Name" Value="@MarketFormat.Price(index.Value)"
+                             ChangeText="@MarketFormat.Change(index.ChangePercent)" ChangeColor="MarketFormat.ChangeColor(index.ChangePercent)" />
+                }
+                <KpiTile Caption="@Localizer["TEDPIX in free-market dollars"]" Value="@MarketFormat.Change(overview.TedpixUsdChangePercent)"
+                         ValueColor="MarketFormat.ChangeColor(overview.TedpixUsdChangePercent)" Note="@Localizer["Today's index move net of the dollar's move"]" />
+                <KpiTile Caption="@Localizer["Equity value traded (hemat)"]" Value="@MarketFormat.Hemat(overview.EquityValue)"
+                         Note="@($"{Localizer["Funds"]}: {MarketFormat.Hemat(overview.FundValue)}")" />
+                <KpiTile Caption="@Localizer["Breadth"]" Value="@($"▲ {overview.Advancers}  ▼ {overview.Decliners}")"
+                         Note="@($"{Localizer["Unchanged"]} {overview.Unchanged} · {Localizer["Not traded"]} {overview.NotTraded} · {Localizer["Halted"]} {overview.Halted}")" />
+                <KpiTile Caption="@Localizer["Buy queues"]" Value="@overview.BuyQueues.ToString(CultureInfo.CurrentCulture)"
+                         ChangeText="@QueueValue(overview.BuyQueueValue)" ChangeColor="BitColor.Success" />
+                <KpiTile Caption="@Localizer["Sell queues"]" Value="@overview.SellQueues.ToString(CultureInfo.CurrentCulture)"
+                         ChangeText="@QueueValue(overview.SellQueueValue)" ChangeColor="BitColor.Error" />
+                <KpiTile Caption="@Localizer["Individual net flow (hemat)"]" Value="@MarketFormat.Hemat(overview.IndividualNetFlow)" ValueColor="MarketFormat.FlowColor(overview.IndividualNetFlow)"
+                         ChangeText="@($"{Localizer["Per-capita buy / sell (million toman)"]}: {MarketFormat.MillionToman(overview.IndividualPerCapitaBuy)} / {MarketFormat.MillionToman(overview.IndividualPerCapitaSell)}")"
+                         Note="@(overview.FlowValuesEstimated ? Localizer["Includes same-day estimates"].Value : null)" />
+                @if (overview.Usd is { } usd)
+                {
+                    <KpiTile Caption="@Localizer["Free-market dollar (rial)"]" Value="@MarketFormat.Price(usd.Value)"
+                             ChangeText="@MarketFormat.Change(usd.ChangePercent)" ChangeColor="MarketFormat.ChangeColor(usd.ChangePercent)" Note="@MarketFormat.Date(usd.Date)" />
+                }
+                @if (overview.Coin is { } coin)
+                {
+                    <KpiTile Caption="@Localizer["Emami gold coin (rial)"]" Value="@MarketFormat.Price(coin.Value)"
+                             ChangeText="@MarketFormat.Change(coin.ChangePercent)" ChangeColor="MarketFormat.ChangeColor(coin.ChangePercent)" Note="@MarketFormat.Date(coin.Date)" />
+                }
+            </div>
+
+            <BitCard FullWidth>
+                <BitPivot>
+                    <BitPivotItem HeaderText="@Localizer["TEDPIX, 1 year"]">
+                        <BitStack Gap="0.5rem">
+                            <BitButtonGroup Toggle FixedToggle Variant="BitVariant.Outline" Items="denominations" @bind-ToggleKey="denomination" @bind-ToggleKey:after="WrapHandled(BuildIndexChart)" />
+                            @if (indexChart is not null)
+                            {
+                                <BitChart Config="indexChart" Height="320px" AriaLabel="@Localizer["TEDPIX over the last year"]" />
+                            }
+                        </BitStack>
+                    </BitPivotItem>
+                    <BitPivotItem HeaderText="@Localizer["Breadth, 20 sessions"]">
+                        @if (breadthChart is not null)
+                        {
+                            <BitChart Config="breadthChart" Height="320px" AriaLabel="@Localizer["Advancers and decliners per session"]" />
+                        }
+                    </BitPivotItem>
+                    <BitPivotItem HeaderText="@Localizer["Sectors today"]">
+                        @if (sectorChart is not null)
+                        {
+                            <BitChart Config="sectorChart" Height="@($"{Math.Max(320, sectors.Count * 22)}px")" AriaLabel="@Localizer["Market-cap-weighted sector returns"]" />
+                        }
+                    </BitPivotItem>
+                </BitPivot>
+            </BitCard>
+
+            <BitCard FullWidth Title="@Localizer["Movers"]">
+                <BitPivot SelectedKey="@moverKind" SelectedKeyChanged="WrapHandled(async (string key) => await LoadMovers(key))">
+                    <BitPivotItem Key="gainers" HeaderText="@Localizer["Gainers"]" />
+                    <BitPivotItem Key="losers" HeaderText="@Localizer["Losers"]" />
+                    <BitPivotItem Key="value" HeaderText="@Localizer["Value"]" />
+                    <BitPivotItem Key="inflow" HeaderText="@Localizer["Individual inflow"]" />
+                    <BitPivotItem Key="outflow" HeaderText="@Localizer["Individual outflow"]" />
+                </BitPivot>
+                <BitDataGrid Items="movers" Strings="DataGridStrings" Direction="MarketFormat.Direction" Striped Hoverable
+                             OnRowClick="(MoverDto m) => OpenSymbol(m.InsCode)">
+                    <BitDataGridColumn Property="m => m.Symbol" Title="@Localizer["Symbol"]" />
+                    <BitDataGridColumn Property="m => m.Name" Title="@Localizer["Name"]" />
+                    <BitDataGridColumn Property="m => m.Close" Title="@Localizer["Closing price"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                    <BitDataGridColumn Property="m => m.ChangePercent" Title="@Localizer["Change"]" Align="BitDataGridColumnAlign.Right">
+                        <Template Context="m">
+                            <BitText Typography="BitTypography.Body2" Numeric Color="MarketFormat.ChangeColor(m.ChangePercent)">@MarketFormat.Change(m.ChangePercent)</BitText>
+                        </Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="m => m.Value" Title="@Localizer["Value (billion toman)"]" Align="BitDataGridColumnAlign.Right">
+                        <Template Context="m">@MarketFormat.BillionToman(m.Value)</Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="m => m.IndividualNetFlow" Title="@Localizer["Individual net (billion toman)"]" Align="BitDataGridColumnAlign.Right">
+                        <Template Context="m">
+                            <BitText Typography="BitTypography.Body2" Numeric Color="MarketFormat.FlowColor(m.IndividualNetFlow)">@MarketFormat.BillionToman(m.IndividualNetFlow)</BitText>
+                        </Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="m => m.DayStatus" Title="@Localizer["Status"]">
+                        <Template Context="m">@MarketFormat.DayStatus(m.DayStatus, Localizer)</Template>
+                    </BitDataGridColumn>
+                </BitDataGrid>
+            </BitCard>
+        }
+    </BitStack>
+</section>

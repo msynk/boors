@@ -1,0 +1,112 @@
+@attribute [Route(PageUrls.MarketWatch)]
+@attribute [Route("{culture?}" + PageUrls.MarketWatch)]
+@attribute [Authorize]
+@inherits AppPageBase
+
+<AppPageData Title="@Localizer["Market watch"]" PageTitle="@Localizer["Market watch"]" />
+
+<section>
+    <BitStack Gap="1rem" HorizontalAlign="BitAlignment.Stretch">
+        <BitCard FullWidth>
+            <BitStack Gap="0.75rem">
+                <BitStack Horizontal Wrap VerticalAlign="BitAlignment.End" Gap="0.75rem">
+                    <BitButtonGroup Toggle FixedToggle Variant="BitVariant.Outline" Items="groups"
+                                    @bind-ToggleKey="group" @bind-ToggleKey:after="WrapHandled(Load)" />
+                    <BitCheckbox Label="@Localizer["Traded only"]" @bind-Value="tradedOnly" @bind-Value:after="WrapHandled(Load)" />
+                    <BitSpacer />
+                    <BitDropdown TItem="BitDropdownItem<string>" TValue="string" FitWidth
+                                 Items="presets" Placeholder="@Localizer["Example filters"]"
+                                 OnChange="WrapHandled(async (string? value) => await ApplyPreset(value))" />
+                </BitStack>
+
+                <BitTextField @bind-Value="filter" Multiline Rows="2" AutoHeight FullWidth SpellCheck="false" Dir="BitDir.Ltr"
+                              Label="@Localizer["TSETMC filter"]"
+                              Placeholder="(pc)>(py)*1.03 && (ct).Buy_I_Volume>(ct).Sell_I_Volume"
+                              Description="@Localizer["Same syntax as the TSETMC market-watch filters, including [ih] history and the true==function(){...}() code mode."]" />
+
+                <BitStack Horizontal Gap="0.5rem" VerticalAlign="BitAlignment.Center">
+                    <BitButton IconName="@BitIconName.Filter" IsLoading="isLoading" OnClick="WrapHandled(Load)">@Localizer["Apply"]</BitButton>
+                    <BitButton Variant="BitVariant.Text" IconName="@BitIconName.ClearFilter" OnClick="WrapHandled(ClearFilter)">@Localizer["Clear"]</BitButton>
+                    <BitSpacer />
+                    @if (result is not null)
+                    {
+                        <BitText Typography="BitTypography.Body2" Color="BitColor.SecondaryForeground">
+                            @Localizer["Session"] @MarketFormat.Date(result.Session) · @result.Entries.Count / @result.Evaluated
+                        </BitText>
+                    }
+                </BitStack>
+
+                @if (errorMessage is not null)
+                {
+                    <BitMessage Color="BitColor.Error" Dismissible OnDismiss="() => errorMessage = null">@errorMessage</BitMessage>
+                }
+                @if (result?.FilterErrors is { Count: > 0 } filterErrors)
+                {
+                    <BitMessage Color="BitColor.Warning" Multiline Truncate>
+                        @Localizer["Some instruments were skipped because the filter failed on them:"]
+                        @foreach (var error in filterErrors)
+                        {
+                            <div dir="ltr">@error</div>
+                        }
+                    </BitMessage>
+                }
+            </BitStack>
+        </BitCard>
+
+        <BitDataGrid Items="entries" Strings="DataGridStrings" Direction="MarketFormat.Direction"
+                     Loading="isLoading" Height="calc(100vh - 22rem)" Virtualize RowHeight="36"
+                     ShowSearchBox ShowExcelExport ShowCsvExport Resizable
+                     AriaLabel="@Localizer["Market watch"]"
+                     OnRowClick="(MarketWatchEntryDto e) => OpenSymbol(e.InsCode)"
+                     Class="watch-grid">
+            <BitDataGridColumn Property="e => e.Symbol" Title="@Localizer["Symbol"]" Frozen Width="7rem" />
+            <BitDataGridColumn Property="e => e.Name" Title="@Localizer["Name"]" Width="13rem" />
+            <BitDataGridColumn Property="e => e.Last" Title="@Localizer["Last"]" Format="N0" Align="BitDataGridColumnAlign.Right" Width="6.5rem" />
+            <BitDataGridColumn Property="e => e.LastChangePercent" Title="@Localizer["Last %"]" Align="BitDataGridColumnAlign.Right" Width="6.5rem">
+                <Template Context="e"><BitText Typography="BitTypography.Body2" Numeric Color="MarketFormat.ChangeColor(e.LastChangePercent)">@MarketFormat.Change(e.LastChangePercent)</BitText></Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.Close" Title="@Localizer["Closing price"]" Format="N0" Align="BitDataGridColumnAlign.Right" Width="6.5rem" />
+            <BitDataGridColumn Property="e => e.ChangePercent" Title="@Localizer["Close %"]" Align="BitDataGridColumnAlign.Right" Width="6.5rem">
+                <Template Context="e"><BitText Typography="BitTypography.Body2" Numeric Color="MarketFormat.ChangeColor(e.ChangePercent)">@MarketFormat.Change(e.ChangePercent)</BitText></Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.Value" Title="@Localizer["Value (billion toman)"]" Align="BitDataGridColumnAlign.Right" Width="10rem"
+                               ExportValue="e => e.Value">
+                <Template Context="e">@MarketFormat.BillionToman(e.Value)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.Volume" Title="@Localizer["Volume"]" Format="N0" Align="BitDataGridColumnAlign.Right" Width="8rem" />
+            <BitDataGridColumn Property="e => e.Trades" Title="@Localizer["Trades"]" Format="N0" Align="BitDataGridColumnAlign.Right" Width="5.5rem" />
+            <BitDataGridColumn Property="e => e.Queue" Title="@Localizer["Queue"]" Width="7.5rem" SortBy="e => e.QueueValue">
+                <Template Context="e">
+                    @if (e.Queue is "buy")
+                    {
+                        <BitTag Color="BitColor.Success" Size="BitSize.Small" Text="@($"{Localizer["Buy"]} {MarketFormat.BillionToman(e.QueueValue)}")" />
+                    }
+                    else if (e.Queue is "sell")
+                    {
+                        <BitTag Color="BitColor.Error" Size="BitSize.Small" Text="@($"{Localizer["Sell"]} {MarketFormat.BillionToman(e.QueueValue)}")" />
+                    }
+                </Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.IndividualNetValue" Title="@Localizer["Individual net (billion toman)"]" Align="BitDataGridColumnAlign.Right" Width="12rem"
+                               ExportValue="e => e.IndividualNetValue">
+                <Template Context="e"><BitText Typography="BitTypography.Body2" Numeric Color="MarketFormat.FlowColor(e.IndividualNetValue)">@MarketFormat.BillionToman(e.IndividualNetValue)</BitText></Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.BuyerPower" Title="@Localizer["Buyer power"]" Format="N2" Align="BitDataGridColumnAlign.Right" Width="7.5rem" />
+            <BitDataGridColumn Property="e => e.PerCapitaBuy" Title="@Localizer["Per-capita buy (million toman)"]" Align="BitDataGridColumnAlign.Right" Width="12rem"
+                               ExportValue="e => e.PerCapitaBuy">
+                <Template Context="e">@MarketFormat.MillionToman(e.PerCapitaBuy)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.PriceEarnings" Title="@Localizer["P/E"]" Format="N1" Align="BitDataGridColumnAlign.Right" Width="5rem" />
+            <BitDataGridColumn Property="e => e.MarketCap" Title="@Localizer["Market cap (hemat)"]" Align="BitDataGridColumnAlign.Right" Width="9.5rem"
+                               ExportValue="e => e.MarketCap">
+                <Template Context="e">@MarketFormat.Hemat(e.MarketCap)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.InstrumentClass" Title="@Localizer["Class"]" Width="8rem">
+                <Template Context="e">@MarketFormat.ClassName(e.InstrumentClass, Localizer)</Template>
+            </BitDataGridColumn>
+            <BitDataGridColumn Property="e => e.DayStatus" Title="@Localizer["Status"]" Width="8rem">
+                <Template Context="e">@MarketFormat.DayStatus(e.DayStatus, Localizer)</Template>
+            </BitDataGridColumn>
+        </BitDataGrid>
+    </BitStack>
+</section>

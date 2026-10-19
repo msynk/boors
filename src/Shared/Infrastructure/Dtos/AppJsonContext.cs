@@ -41,6 +41,7 @@ namespace Boors.Shared.Infrastructure.Dtos;
 [JsonSerializable(typeof(NugetStatsDto))]
 [JsonSerializable(typeof(MarketDataHealthDto))]
 [JsonSerializable(typeof(MarketOverviewDto))]
+[JsonSerializable(typeof(List<SeriesPointDto>))]
 [JsonSerializable(typeof(List<BreadthDayDto>))]
 [JsonSerializable(typeof(List<SectorPerformanceDto>))]
 [JsonSerializable(typeof(List<MoverDto>))]

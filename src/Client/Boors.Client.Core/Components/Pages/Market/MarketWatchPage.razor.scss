@@ -1,0 +1,14 @@
+@import '../../../Styles/abstracts/_media-queries.scss';
+@import '../../../Styles/abstracts/_bit-css-variables.scss';
+
+section {
+    width: 100%;
+    padding: 1rem;
+}
+
+::deep {
+    .watch-grid {
+        min-height: 24rem;
+        font-variant-numeric: tabular-nums;
+    }
+}

@@ -60,4 +60,19 @@ public static partial class PageUrls
     public const string OAuthConsent = "/oauth-consent";
 
     public const string WebInteropApp = "/web-interop-app.html";
+
+    [Description("Tehran Stock Exchange and Fara Bourse at a glance: indices, value traded, breadth, queues, money flow and sectors for the latest session. Requires sign-in.")]
+    public const string MarketOverview = "/market";
+
+    [Description("The market watch: every instrument of the session, filterable with TSETMC-compatible filter expressions. Requires sign-in.")]
+    public const string MarketWatch = "/market/watch";
+
+    [Description("Rankings of shares by momentum, 52-week-high proximity, individual money flow and buyer power. Requires sign-in.")]
+    public const string MarketScreens = "/market/screens";
+
+    [Description("Freshness of the market data, collection jobs and source reachability. Requires sign-in.")]
+    public const string MarketHealth = "/market/health";
+
+    /// <summary>The symbol workspace; the page route appends <c>/{insCode:long}</c>.</summary>
+    public const string Symbol = "/symbol";
 }

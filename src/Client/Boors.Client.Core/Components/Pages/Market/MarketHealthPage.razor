@@ -1,0 +1,84 @@
+@attribute [Route(PageUrls.MarketHealth)]
+@attribute [Route("{culture?}" + PageUrls.MarketHealth)]
+@attribute [Authorize(Policy = AppFeatures.System.Operations_View)]
+@inherits AppPageBase
+
+<AppPageData Title="@Localizer["Market data health"]" PageTitle="@Localizer["Market data health"]" />
+
+<section>
+    <BitStack Gap="1rem" HorizontalAlign="BitAlignment.Stretch">
+        <BitStack Horizontal Wrap VerticalAlign="BitAlignment.Center" Gap="0.75rem">
+            @if (health is not null)
+            {
+                <BitTag Color="@(health.Healthy ? BitColor.Success : BitColor.Error)" Text="@(health.Healthy ? Localizer["Healthy"].Value : Localizer["Needs attention"].Value)" />
+                <BitText Typography="BitTypography.Body2" Color="BitColor.SecondaryForeground">
+                    @Localizer["Expected session"] @MarketFormat.Date(health.ExpectedSession) · @Localizer["Node"] @health.Node · @health.GeneratedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+                </BitText>
+            }
+            <BitSpacer />
+            <BitButton Variant="BitVariant.Outline" IconName="@BitIconName.Refresh" IsLoading="isLoading" OnClick="WrapHandled(Load)">@Localizer["Reload"]</BitButton>
+        </BitStack>
+
+        @if (queuedMessage is not null)
+        {
+            <BitMessage Color="BitColor.Success" Dismissible OnDismiss="() => queuedMessage = null">@queuedMessage</BitMessage>
+        }
+
+        <BitCard FullWidth Title="@Localizer["Run a collection job"]">
+            <BitStack Horizontal Wrap Gap="0.5rem">
+                @foreach (var job in jobs)
+                {
+                    <BitButton Variant="BitVariant.Outline" Size="BitSize.Small" IsLoading="@(runningJob == job)" OnClick="WrapHandled(async () => await Run(job))">@job</BitButton>
+                }
+            </BitStack>
+        </BitCard>
+
+        @if (health is not null)
+        {
+            <BitCard FullWidth Title="@Localizer["Datasets"]">
+                <BitDataGrid Items="health.Datasets" Strings="DataGridStrings" Direction="MarketFormat.Direction">
+                    <BitDataGridColumn Property="d => d.Dataset" Title="@Localizer["Dataset"]" />
+                    <BitDataGridColumn Property="d => d.Rows" Title="@Localizer["Rows"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                    <BitDataGridColumn Property="d => d.LatestDate" Title="@Localizer["Latest"]">
+                        <Template Context="d">@MarketFormat.Date(d.LatestDate)</Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="d => d.ExpectedDate" Title="@Localizer["Expected"]">
+                        <Template Context="d">@MarketFormat.Date(d.ExpectedDate)</Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="d => d.Status" Title="@Localizer["Status"]">
+                        <Template Context="d"><BitTag Size="BitSize.Small" Color="StatusColor(d.Status)" Text="@d.Status" /></Template>
+                    </BitDataGridColumn>
+                </BitDataGrid>
+            </BitCard>
+
+            <BitCard FullWidth Title="@Localizer["Last runs"]">
+                <BitDataGrid Items="health.Runs" Strings="DataGridStrings" Direction="MarketFormat.Direction">
+                    <BitDataGridColumn Property="r => r.Job" Title="@Localizer["Job"]" />
+                    <BitDataGridColumn Property="r => r.StartedAt" Title="@Localizer["Started"]">
+                        <Template Context="r">@r.StartedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="r => r.FinishedAt" Title="@Localizer["Duration"]">
+                        <Template Context="r">@(r.FinishedAt is { } f ? $"{(f - r.StartedAt).TotalSeconds:N0} s" : Localizer["running"].Value)</Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="r => r.Status" Title="@Localizer["Status"]">
+                        <Template Context="r"><BitTag Size="BitSize.Small" Color="StatusColor(r.Status)" Text="@r.Status" /></Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="r => r.Items" Title="@Localizer["Items"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                    <BitDataGridColumn Property="r => r.Failures" Title="@Localizer["Failures"]" Format="N0" Align="BitDataGridColumnAlign.Right" />
+                    <BitDataGridColumn Property="r => r.Message" Title="@Localizer["Message"]" />
+                </BitDataGrid>
+            </BitCard>
+
+            <BitCard FullWidth Title="@Localizer["Sources"]" Subtitle="@(health.LastProbeAt is { } probe ? $"{Localizer["Last probe"]}: {probe.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}" : Localizer["Not probed yet"].Value)">
+                <BitDataGrid Items="health.Sources" Strings="DataGridStrings" Direction="MarketFormat.Direction">
+                    <BitDataGridColumn Property="s => s.Name" Title="@Localizer["Source"]" />
+                    <BitDataGridColumn Property="s => s.Verdict" Title="@Localizer["Verdict"]">
+                        <Template Context="s"><BitTag Size="BitSize.Small" Color="StatusColor(s.Verdict)" Text="@s.Verdict" /></Template>
+                    </BitDataGridColumn>
+                    <BitDataGridColumn Property="s => s.Status" Title="HTTP" Align="BitDataGridColumnAlign.Right" />
+                    <BitDataGridColumn Property="s => s.Error" Title="@Localizer["Error"]" />
+                </BitDataGrid>
+            </BitCard>
+        }
+    </BitStack>
+</section>

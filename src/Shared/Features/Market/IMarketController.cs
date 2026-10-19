@@ -21,6 +21,14 @@ public interface IMarketController : IAppController
     [HttpGet("{kind}{?take}")]
     Task<List<ScreenRowDto>> GetScreen(string kind, int take, CancellationToken cancellationToken) => default!;
 
+    /// <summary>Daily closes of an index from <paramref name="from"/> (yyyy-MM-dd).</summary>
+    [HttpGet("{insCode}{?from}")]
+    Task<List<SeriesPointDto>> GetIndexHistory(long insCode, string? from, CancellationToken cancellationToken) => default!;
+
+    /// <summary>Daily closes of a macro series (price_dollar_rl, sekee, geram18, ons, price_eur).</summary>
+    [HttpGet("{series}{?from}")]
+    Task<List<SeriesPointDto>> GetMacroHistory(string series, string? from, CancellationToken cancellationToken) => default!;
+
     [HttpGet("{?text,take}")]
     Task<List<InstrumentSearchResultDto>> Search(string text, int take, CancellationToken cancellationToken) => default!;
 

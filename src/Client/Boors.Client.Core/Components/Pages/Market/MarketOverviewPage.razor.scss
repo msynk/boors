@@ -1,0 +1,25 @@
+@import '../../../Styles/abstracts/_media-queries.scss';
+@import '../../../Styles/abstracts/_bit-css-variables.scss';
+
+section {
+    width: 100%;
+    padding: 1rem;
+}
+
+.kpi-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+}
+
+::deep {
+    // Charts read left to right in every culture (time runs that way on Persian market sites too). Without this an
+    // RTL page flips the anchors of the SVG axis labels and they overlap the plot.
+    .bit-cht-svg {
+        direction: ltr;
+    }
+
+    .symbol-search {
+        min-width: 16rem;
+    }
+}

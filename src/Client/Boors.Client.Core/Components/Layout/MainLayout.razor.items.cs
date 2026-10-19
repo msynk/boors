@@ -21,6 +21,28 @@ public partial class MainLayout
 
         var tenantIsSelected = await authorizationService.IsAuthorized(authUser!, AuthPolicies.TENANT_SELECTED);
 
+        if (authUser.Identity?.IsAuthenticated is true)
+        {
+            var marketItem = new BitNavItem
+            {
+                Text = localizer["Market"],
+                IconName = BitIconName.Market,
+                IsExpanded = true,
+                ChildItems =
+                [
+                    new() { Text = localizer["Overview"], IconName = BitIconName.StackColumnChart, Url = PageUrls.MarketOverview },
+                    new() { Text = localizer["Market watch"], IconName = BitIconName.Filters, Url = PageUrls.MarketWatch },
+                    new() { Text = localizer["Screens"], IconName = BitIconName.BarChartVerticalFilter, Url = PageUrls.MarketScreens },
+                ],
+            };
+
+            if (await authorizationService.IsAuthorized(authUser!, AppFeatures.System.Operations_View))
+            {
+                marketItem.ChildItems.Add(new() { Text = localizer["Data health"], IconName = BitIconName.Health, Url = PageUrls.MarketHealth });
+            }
+
+            navPanelItems.Add(marketItem);
+        }
 
         if (await authorizationService.IsAuthorized(authUser!, AppFeatures.Todo.Todo_Manage_Self))
         {

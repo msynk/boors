@@ -11,6 +11,7 @@ public partial class MarketController : AppControllerBase, IMarketController
 {
     [AutoInject] private MarketAnalytics analytics = default!;
     [AutoInject] private MarketWatchService marketWatch = default!;
+    [AutoInject] private Boors.Market.Storage.MarketStore store = default!;
 
     [HttpGet]
     public Task<MarketOverviewDto?> GetOverview([FromQuery] string? date, CancellationToken cancellationToken) =>
@@ -40,6 +41,20 @@ public partial class MarketController : AppControllerBase, IMarketController
             throw new BadRequestException($"Unknown screen '{kind}'.");
 
         return Task.FromResult(analytics.Screen(screenKind, Take(take)).Select(r => r.Map()).ToList());
+    }
+
+    [HttpGet("{insCode}")]
+    public Task<List<SeriesPointDto>> GetIndexHistory(long insCode, [FromQuery] string? from, CancellationToken cancellationToken)
+    {
+        var start = ParseDate(from) ?? DateOnly.MinValue;
+        return Task.FromResult(store.GetIndexBars(insCode).Where(b => b.Date >= start).Select(b => new SeriesPointDto(b.Date, b.Close)).ToList());
+    }
+
+    [HttpGet("{series}")]
+    public Task<List<SeriesPointDto>> GetMacroHistory(string series, [FromQuery] string? from, CancellationToken cancellationToken)
+    {
+        var start = ParseDate(from) ?? DateOnly.MinValue;
+        return Task.FromResult(store.GetMacroDaily(series).Where(b => b.Date >= start).Select(b => new SeriesPointDto(b.Date, b.Close)).ToList());
     }
 
     [HttpGet]
