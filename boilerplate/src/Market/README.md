@@ -2,7 +2,7 @@
 
 The data layer for Tehran Stock Exchange (TSE) and Iran Fara Bourse (IFB) data. It has no dependency on the Blazor
 stack, so the server, background jobs, the CLI and research tools can all use it.
-See [docs/development-plan.md](../../docs/development-plan.md) §3–§6 for the design, §9.2–§9.3 for the Phase 1 and Phase 2 status and
+See [docs/development-plan.md](../../../docs/development-plan.md) §3–§6 for the design, §9.2–§9.3 for the Phase 1 and Phase 2 status and
 §9.4 for what the live data taught us.
 
 | Project | What it is |

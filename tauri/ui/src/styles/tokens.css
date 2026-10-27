@@ -1,0 +1,157 @@
+/*
+ * Design tokens. Dark is the default theme; light is its own selected set (not an inversion). Up/down pairs:
+ *   iran (default): green up, red down — validated with the dataviz palette validator; adjacent CVD ΔE 7.2 (light)
+ *     and 7.1 (dark) is the 6–8 floor band, legal only with secondary encoding, which every change carries (▲/▼ and
+ *     the sign; position against the baseline in charts).
+ *   cb: blue up, orange down — passes every check in both modes (CVD ΔE 24.7 light / 26.8 dark).
+ * Text tokens are ≥ 4.5:1 on --surface and --surface-2; mark tokens are ≥ 3:1 on --surface.
+ */
+
+:root {
+  --font-family: 'Vazirmatn', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Consolas', 'SFMono-Regular', monospace;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --topbar-h: 52px;
+  --sidenav-w: 200px;
+  --gap: 12px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-xxl: 30px;
+  --row-h: 28px;
+  --shadow: 0 8px 30px rgb(0 0 0 / 0.35);
+
+  /* dark (default) */
+  color-scheme: dark;
+  --bg: #111110;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --surface-3: #2e2e2b;
+  --stripe: #1e1e1d;
+  --hover: #272725;
+  --active-row: #1f2d40;
+  --border: #2c2c2a;
+  --border-strong: #3d3d39;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #9b9a93;
+  --grid: #262624;
+  --axis: #383835;
+  --accent: #3987e5;
+  --accent-text: #6da7ec;
+  --accent-bg: #256abf;
+  --on-accent: #ffffff;
+  --focus: #6da7ec;
+
+  --up: #0ca30c;
+  --down: #e66767;
+  --up-text: #22b33a;
+  --down-text: #ef7a7a;
+  --up-bg: rgb(12 163 12 / 0.16);
+  --down-bg: rgb(230 103 103 / 0.16);
+  --up-overflow: #6fdc7f;
+  --down-overflow: #ffa8a8;
+  --flat: #9b9a93;
+  --div-mid: #383835;
+  --inactive: #4a4945;
+  --hatch: #77756f;
+  /* Magnitude (value traded): a neutral hue that is neither up nor down in either preset. */
+  --volume: #6f7680;
+  /* Corporate-event markers: violet (palette slot 7), distinct from up/down in both presets. */
+  --event: #9085e9;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --status-info: #3987e5;
+  --status-good-ink: #0ca30c;
+  --status-warning-ink: #fab219;
+  --status-serious-ink: #ec835a;
+  --status-critical-ink: #ef7a7a;
+  --status-info-ink: #6da7ec;
+}
+
+:root[data-colors='cb'] {
+  --up: #3987e5;
+  --down: #d95926;
+  --up-text: #6da7ec;
+  --down-text: #ee8450;
+  --up-bg: rgb(57 135 229 / 0.18);
+  --down-bg: rgb(217 89 38 / 0.18);
+  --up-overflow: #9cc4f3;
+  --down-overflow: #f5a37b;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --shadow: 0 8px 30px rgb(0 0 0 / 0.14);
+  --bg: #f4f4f1;
+  --surface: #fcfcfb;
+  --surface-2: #f2f1ee;
+  --surface-3: #e6e5df;
+  --stripe: #f7f7f4;
+  --hover: #efeee9;
+  --active-row: #dde9f8;
+  --border: #e1e0d9;
+  --border-strong: #c9c8c0;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #6b6a66;
+  --grid: #ebeae4;
+  --axis: #c3c2b7;
+  --accent: #2a78d6;
+  --accent-text: #1c5cab;
+  --accent-bg: #256abf;
+  --on-accent: #ffffff;
+  --focus: #1c5cab;
+
+  --up: #008300;
+  --down: #e34948;
+  --up-text: #006300;
+  --down-text: #c53030;
+  --up-bg: rgb(0 131 0 / 0.1);
+  --down-bg: rgb(227 73 72 / 0.1);
+  --up-overflow: #004a00;
+  --down-overflow: #8f1d1d;
+  --flat: #6b6a66;
+  --div-mid: #dddcd5;
+  --inactive: #cfcec7;
+  --hatch: #8c8a84;
+  --volume: #a4abb4;
+  --event: #6250d6;
+
+  --status-good-ink: #0a7d0a;
+  --status-warning-ink: #9a6700;
+  --status-serious-ink: #b5532c;
+  --status-critical-ink: #c53030;
+  --status-info-ink: #1c5cab;
+}
+
+:root[data-theme='light'][data-colors='cb'] {
+  --up: #2a78d6;
+  --down: #eb6834;
+  --up-text: #1c5cab;
+  --down-text: #a84a1c;
+  --up-bg: rgb(42 120 214 / 0.1);
+  --down-bg: rgb(235 104 52 / 0.12);
+  --up-overflow: #104281;
+  --down-overflow: #8a3a12;
+}
+
+:root[data-density='lite'] {
+  --row-h: 36px;
+  --fs: 14px;
+  --fs-sm: 12.5px;
+}
+
+@media (forced-colors: active) {
+  :root {
+    --up-text: CanvasText;
+    --down-text: CanvasText;
+  }
+}

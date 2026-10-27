@@ -1,0 +1,35 @@
+{
+  "name": "boors-ui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SolidJS workstation UI for Boors (Tauri 2 desktop + HTTP node).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@solidjs/router": "1.0.0",
+    "@tauri-apps/api": "2.12.4",
+    "echarts": "6.1.0",
+    "lightweight-charts": "5.2.1",
+    "solid-js": "1.9.17",
+    "vazirmatn": "33.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.13.0",
+    "eslint-plugin-solid": "0.18.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vite-plugin-solid": "2.11.14",
+    "vitest": "5.0.5"
+  }
+}

@@ -1,0 +1,20 @@
+{
+    "mcpServers": {
+        "bitplatform": {
+            "type": "http",
+            "url": "https://bitplatform.dev/mcp?v=10.6.2"
+        },
+        "playwright": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "@playwright/mcp@latest",
+                "--output-dir",
+                ".playwright-mcp",
+                "--output-max-size",
+                "52428800"
+            ]
+        }
+    }
+}

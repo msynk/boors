@@ -1,0 +1,14 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+
+# Local data (raw cache, market.duckdb, reports) — never commit market data
+.boors-data/
+
+# Tauri generated files
+apps/desktop/src-tauri/gen/schemas/
+apps/desktop/src-tauri/target/

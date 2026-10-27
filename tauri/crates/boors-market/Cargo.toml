@@ -1,0 +1,33 @@
+[package]
+name = "boors-market"
+description = "Iranian capital-market data: TSETMC/Codal/tgju/fipiran clients, write-once raw cache, parsers, dated rules, day-status classification, DuckDB market store, collectors, analytics, TSETMC filters and the API dispatcher."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+chrono-tz.workspace = true
+duckdb.workspace = true
+flate2.workspace = true
+hex.workspace = true
+rand.workspace = true
+rayon.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+zip.workspace = true
+rquickjs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

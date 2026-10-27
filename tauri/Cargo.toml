@@ -1,0 +1,61 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/boors-market",
+    "crates/boors-cli",
+    "crates/boors-server",
+    "apps/desktop/src-tauri",
+]
+default-members = [
+    "crates/boors-market",
+    "crates/boors-cli",
+    "crates/boors-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+authors = ["Boors"]
+
+[workspace.dependencies]
+boors-market = { path = "crates/boors-market" }
+
+anyhow = "1"
+async-trait = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+chrono-tz = "0.10"
+clap = { version = "4", features = ["derive", "env"] }
+duckdb = { version = "1", features = ["bundled", "chrono", "rust_decimal"] }
+flate2 = "1"
+hex = "0.4"
+rand = "0.9"
+rayon = "1"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate", "http2", "charset"] }
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+serde_yaml_ng = "0.10"
+sha2 = "0.10"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "signal", "net", "io-util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+rquickjs = "0.14"
+
+[profile.dev.package.libduckdb-sys]
+opt-level = 3
+
+[profile.dev.package.rquickjs-sys]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
