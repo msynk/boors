@@ -41,6 +41,7 @@ public static class NodeEndpoints
             api.GetSectorReturnsAsync(period, minValue ?? 0, asOf, from, ct));
         report.MapGet("GetSignalTrackRecord", (int? years, string? asOf, string? from, IMarketApi api, CancellationToken ct) => api.GetSignalTrackRecordAsync(years ?? 0, asOf, from, ct));
         report.MapGet("GetSeasonality", (string? asOf, string? from, IMarketApi api, CancellationToken ct) => api.GetSeasonalityAsync(asOf, from, ct));
+        report.MapGet("GetShortlist", (string? asOf, IMarketApi api, CancellationToken ct) => api.GetShortlistAsync(asOf, ct));
 
         var marketData = app.MapGroup("api/v1/MarketData").WithTags("MarketData");
         marketData.MapGet("GetHealth", (IMarketApi api, CancellationToken ct) => api.GetHealthAsync(ct));

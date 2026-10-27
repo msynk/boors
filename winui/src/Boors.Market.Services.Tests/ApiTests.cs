@@ -68,6 +68,9 @@ public sealed class ApiTests
         Assert.AreEqual("custom", (await api.GetSectorReturnsAsync("6m", 0, "2026-10-17", "2026-01-01", ct)).Period);
         Assert.IsEmpty((await api.GetSignalTrackRecordAsync(0, null, null, ct)).Signals);
         Assert.IsEmpty((await api.GetSeasonalityAsync(null, null, ct)).Years);
+        var shortlist = await api.GetShortlistAsync(null, ct);
+        Assert.IsNull(shortlist.AsOf);
+        Assert.IsEmpty(shortlist.LongTerm);
 
         Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("Best", "1y", 0, 0, null, null, ct)).StatusCode);
         Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("TopPerformers", "2y", 0, 0, null, null, ct)).StatusCode);
@@ -76,6 +79,7 @@ public sealed class ApiTests
         Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("TopPerformers", null, 0, 0, "2026-01-01", "2026-01-01", ct)).StatusCode);
         Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetSignalTrackRecordAsync(0, "2026-01-01", "2026-06-01", ct)).StatusCode);
         Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetSeasonalityAsync("1405/07/25", null, ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetShortlistAsync("27-10-2026", ct)).StatusCode);
     }
 
     [TestMethod]

@@ -23,12 +23,19 @@ public sealed class MarketReports(MarketStore store, MarketRules rules)
     private const string Equity = MarketAnalytics.Equity;
     private const string Return = MarketAnalytics.Return;
 
+    /// <summary>
+    /// Days on which shares traded. Funds and bonds also trade on days the stock market is shut (45 such days in the
+    /// March–May 2026 closure), so "any instrument traded" is not a session of the equity reports: it would lower every
+    /// share's days-traded share, empty the liquidity window and move monthly test dates onto days with no share prices.
+    /// </summary>
+    private const string EquitySessions = $"SELECT DISTINCT b.d FROM daily_bar b JOIN instrument i USING (ins_code) WHERE {Equity} AND b.trade_count > 0";
+
     public DateOnly? LatestSession() =>
-        store.Query("SELECT max(d) FROM daily_bar WHERE trade_count > 0", [], r => r.IsDBNull(0) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(0)).Single();
+        store.Query($"SELECT max(d) FROM ({EquitySessions})", [], r => r.IsDBNull(0) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(0)).Single();
 
     /// <summary>The last session on or before <paramref name="date"/> (a base date on a weekend or holiday falls back to it).</summary>
     public DateOnly? SessionOnOrBefore(DateOnly date) =>
-        store.Query("SELECT max(d) FROM daily_bar WHERE trade_count > 0 AND d <= $d", [("d", date)], r => r.IsDBNull(0) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(0)).Single();
+        store.Query($"SELECT max(d) FROM ({EquitySessions}) WHERE d <= $d", [("d", date)], r => r.IsDBNull(0) ? (DateOnly?)null : r.GetFieldValue<DateOnly>(0)).Single();
 
     private DateOnly? End(DateOnly? asOf) => asOf is { } date ? SessionOnOrBefore(date) : LatestSession();
 
@@ -103,7 +110,7 @@ public sealed class MarketReports(MarketStore store, MarketRules rules)
         if (from >= to)
             return PerformanceReport.Empty with { Period = period, AsOf = to, From = from, Latest = latest };
         (string, object?)[] window = [("from", from), ("to", to)];
-        var sessions = store.Query("SELECT count(DISTINCT d) FROM daily_bar WHERE trade_count > 0 AND d > $from AND d <= $to", window, r => (int)r.GetInt64(0)).Single();
+        var sessions = store.Query($"SELECT count(*) FROM ({EquitySessions}) WHERE d > $from AND d <= $to", window, r => (int)r.GetInt64(0)).Single();
 
         var stats = store.Query($"""
             WITH {WindowReturns(listedAtStart: true)},
@@ -137,8 +144,8 @@ public sealed class MarketReports(MarketStore store, MarketRules rules)
             WHERE {Equity} AND b.trade_count > 0 AND b.d > $from AND b.d <= $to
             """, window, r => (int)r.GetInt64(0)).Single();
 
-        var liquidity = store.Query("""
-            WITH s AS (SELECT DISTINCT d FROM daily_bar WHERE trade_count > 0 AND d <= $to ORDER BY d DESC LIMIT 20)
+        var liquidity = store.Query($"""
+            WITH s AS (SELECT d FROM ({EquitySessions}) WHERE d <= $to ORDER BY d DESC LIMIT 20)
             SELECT ins_code, coalesce(sum(value) FILTER (WHERE trade_count > 0), 0) / (SELECT count(*) FROM s)
             FROM daily_bar WHERE d IN (SELECT d FROM s) GROUP BY ins_code
             """, [("to", to)], r => (InsCode: r.GetInt64(0), Value: Convert.ToDecimal(r.GetValue(1), CultureInfo.InvariantCulture)))
@@ -252,7 +259,7 @@ public sealed class MarketReports(MarketStore store, MarketRules rules)
         var levels = store.Query($"""
             WITH {WindowReturns(listedAtStart: true)},
             lv AS (SELECT ins_code, d, sum(ln(1 + coalesce(ret, 0))) OVER (PARTITION BY ins_code ORDER BY d ROWS UNBOUNDED PRECEDING) AS cum FROM r),
-            me AS (SELECT max(d) AS t FROM daily_bar WHERE trade_count > 0 AND d > $from AND d <= $to GROUP BY date_trunc('month', d)),
+            me AS (SELECT max(d) AS t FROM ({EquitySessions}) WHERE d > $from AND d <= $to GROUP BY date_trunc('month', d)),
             s AS (SELECT DISTINCT ins_code FROM lv)
             SELECT s.ins_code, me.t, lv.cum FROM s CROSS JOIN me ASOF JOIN lv ON lv.ins_code = s.ins_code AND me.t >= lv.d
             """, window, r => (InsCode: r.GetInt64(0), Date: r.GetFieldValue<DateOnly>(1), Level: r.GetDouble(2)));
@@ -304,6 +311,170 @@ public sealed class MarketReports(MarketStore store, MarketRules rules)
         })];
     }
 
+    // ---------------------------------------------------------------- shortlist
+
+    /// <summary>Minimum average value traded per session for the short and mid lists (10 billion toman).</summary>
+    public const decimal ShortlistTradingValue = 100_000_000_000m;
+
+    /// <summary>Minimum average value traded per session for the long list (5 billion toman).</summary>
+    public const decimal ShortlistHoldingValue = 50_000_000_000m;
+
+    /// <summary>
+    /// Three ranked lists of shares, one per horizon, from the performance reports on one base date (default: the
+    /// latest session). They are screens built on what the reports and the walk-forward tests showed, not forecasts:
+    /// <list type="bullet">
+    /// <item><b>Short (1–3 months):</b> strong 12-month trend without the latest month, return per unit of risk, low
+    /// volatility and closeness to the 52-week high (the rules that came closest to working); last month's hottest
+    /// tenth (they tended to give back) and shares locked in buy queues on over 30% of the last three months' sessions
+    /// are left out.</item>
+    /// <item><b>Mid (6–12 months):</b> 1-year reliability score, 12-month trend, 1-year return in dollars, 3-year
+    /// yearly return and a shallow deepest fall; only shares that beat the dollar over the year and rose in at least
+    /// half of the months.</item>
+    /// <item><b>Long (3–5 years):</b> mean of the 5- and 3-year reliability scores (3-year only, less 5 points, for a
+    /// shorter history); only shares that beat TEDPIX, won at least half of their one-year holds against the dollar,
+    /// never fell more than 50% and traded on at least 85% of the sessions.</item>
+    /// </list>
+    /// The short and mid lists need <see cref="ShortlistTradingValue"/>, the long list <see cref="ShortlistHoldingValue"/>
+    /// of value traded per session, and every list keeps at most <paramref name="perSector"/> shares of one sector.
+    /// </summary>
+    public Shortlist GetShortlist(DateOnly? asOf = null, int take = 10, int perSector = 2)
+    {
+        var month = GetUniverse(ReportPeriod.OneMonth, ShortlistTradingValue, asOf, null);
+        if (month.AsOf is null)
+            return Shortlist.Empty;
+
+        var quarter = GetUniverse(ReportPeriod.ThreeMonths, ShortlistTradingValue, asOf, null);
+        var year = GetUniverse(ReportPeriod.OneYear, ShortlistTradingValue, asOf, null);
+        var three = GetUniverse(ReportPeriod.ThreeYears, ShortlistHoldingValue, asOf, null);
+        var five = GetUniverse(ReportPeriod.FiveYears, ShortlistHoldingValue, asOf, null);
+        var m1 = month.Rows.ToDictionary(r => r.InsCode);
+        var m3 = quarter.Rows.ToDictionary(r => r.InsCode);
+        var y3 = three.Rows.ToDictionary(r => r.InsCode);
+        var y5 = five.Rows.ToDictionary(r => r.InsCode);
+
+        double? Momentum(PerformanceRow r) => m1.TryGetValue(r.InsCode, out var last) ? (1 + r.Return) / (1 + last.Return) - 1 : null;
+        ShortlistPick Pick(PerformanceRow r) => new()
+        {
+            InsCode = r.InsCode,
+            Symbol = r.Symbol,
+            Name = r.Name,
+            SectorCode = r.SectorCode,
+            SectorName = r.SectorName,
+            AverageValue20 = r.AverageValue20,
+            SinceThen = r.SinceThen,
+        };
+
+        // Short: last month's hottest tenth tends to give back, and a share mostly in buy queues could not be bought.
+        var hot = Quantile([.. month.Rows.Select(r => r.Return)], 0.9);
+        var shortCandidates = year.Rows
+            .Where(r => r.Coverage >= 0.8 && m1.TryGetValue(r.InsCode, out var last) && last.Return < hot
+                && m3.TryGetValue(r.InsCode, out var q) && (q.BuyQueueShare ?? 0) <= 0.3)
+            .ToList();
+        var shortTerm = Rank(shortCandidates,
+            [Momentum, r => r.RiskAdjusted, r => -r.Volatility, r => r.FromHigh52Week],
+            (r, score) => Pick(r) with
+            {
+                Score = score,
+                Return1M = m1[r.InsCode].Return,
+                Return3M = m3[r.InsCode].Return,
+                Return1Y = r.Return,
+                Momentum12To1 = Momentum(r),
+                RiskAdjusted = r.RiskAdjusted,
+                Volatility = r.Volatility,
+                FromHigh52Week = r.FromHigh52Week,
+                PositiveMonths = r.PositiveMonths,
+                MaxDrawdown = r.MaxDrawdown,
+            });
+
+        var midCandidates = year.Rows.Where(r => r.Coverage >= 0.8 && r.PositiveMonths >= 0.5 && r.UsdReturn > 0).ToList();
+        var midTerm = Rank(midCandidates,
+            [r => r.Score, Momentum, r => r.UsdReturn, r => y3.TryGetValue(r.InsCode, out var t) ? t.AnnualizedReturn : null, r => r.MaxDrawdown],
+            (r, score) => Pick(r) with
+            {
+                Score = score,
+                Return1Y = r.Return,
+                UsdReturn1Y = r.UsdReturn,
+                Momentum12To1 = Momentum(r),
+                AnnualizedReturn3Y = y3.TryGetValue(r.InsCode, out var t) ? t.AnnualizedReturn : null,
+                FromHigh52Week = r.FromHigh52Week,
+                PositiveMonths = r.PositiveMonths,
+                MaxDrawdown = r.MaxDrawdown,
+            });
+
+        var longTerm = Diversify(three.Rows
+            .Select(r => (Three: r, Record: y5.GetValueOrDefault(r.InsCode) ?? r))
+            .Where(x => x.Record.Coverage >= 0.85 && x.Record.MaxDrawdown >= -0.5 && x.Record.ExcessReturn > 0 && x.Record.UsdWinRate >= 0.5)
+            .Select(x =>
+            {
+                var hasFive = !ReferenceEquals(x.Record, x.Three);
+                return Pick(x.Three) with
+                {
+                    Score = hasFive ? ((x.Three.Score ?? 0) + (x.Record.Score ?? 0)) / 2 : (x.Three.Score ?? 0) - 5,
+                    RecordYears = hasFive ? 5 : 3,
+                    AnnualizedReturn = x.Record.AnnualizedReturn,
+                    UsdReturn = x.Record.UsdReturn,
+                    UsdWinRate = x.Record.UsdWinRate,
+                    PositiveMonths = x.Record.PositiveMonths,
+                    MaxDrawdown = x.Record.MaxDrawdown,
+                    FromHigh52Week = x.Three.FromHigh52Week,
+                };
+            })
+            .OrderByDescending(p => p.Score), take, perSector);
+
+        List<ShortlistPick> Rank(List<PerformanceRow> candidates, Func<PerformanceRow, double?>[] parts, Func<PerformanceRow, double, ShortlistPick> pick)
+        {
+            var percentiles = parts.Select(part => PercentileRanks([.. candidates.Select(part)])).ToList();
+            var ranked = candidates
+                .Select((row, i) => (Row: row, Present: percentiles.Select(p => p[i]).Where(p => p is not null).Select(p => p!.Value).ToList()))
+                .Where(x => x.Present.Count >= parts.Length - 1)
+                .Select(x => pick(x.Row, x.Present.Average() * 100))
+                .OrderByDescending(p => p.Score).ThenBy(p => p.Symbol, StringComparer.Ordinal);
+            return Diversify(ranked, take, perSector);
+        }
+
+        // Which other lists hold the same share: the sturdiest candidates show up on more than one horizon.
+        var lists = new Dictionary<string, List<ShortlistPick>> { [ShortlistHorizons.Short] = shortTerm, [ShortlistHorizons.Mid] = midTerm, [ShortlistHorizons.Long] = longTerm };
+        IReadOnlyList<ShortlistPick> WithOthers(string horizon) =>
+            [.. lists[horizon].Select(p => p with { AlsoIn = [.. lists.Where(l => l.Key != horizon && l.Value.Any(o => o.InsCode == p.InsCode)).Select(l => l.Key)] })];
+
+        return new Shortlist
+        {
+            AsOf = year.AsOf,
+            Latest = year.Latest,
+            ShortTerm = WithOthers(ShortlistHorizons.Short),
+            MidTerm = WithOthers(ShortlistHorizons.Mid),
+            LongTerm = WithOthers(ShortlistHorizons.Long),
+            Tedpix3M = quarter.TedpixReturn,
+            Usd3M = quarter.UsdReturn,
+            Tedpix1Y = year.TedpixReturn,
+            Usd1Y = year.UsdReturn,
+            Tedpix5Y = five.TedpixReturn,
+            Usd5Y = five.UsdReturn,
+            TedpixSinceThen = year.TedpixSinceThen,
+            UsdSinceThen = year.UsdSinceThen,
+            MissingHistory = five.ShortHistory,
+        };
+    }
+
+    /// <summary>The first <paramref name="take"/> picks in order, at most <paramref name="perSector"/> of any one sector.</summary>
+    private static List<ShortlistPick> Diversify(IEnumerable<ShortlistPick> ranked, int take, int perSector)
+    {
+        var bySector = new Dictionary<string, int>();
+        var result = new List<ShortlistPick>();
+        foreach (var pick in ranked)
+        {
+            var sector = pick.SectorCode ?? string.Empty;
+            if (bySector.GetValueOrDefault(sector) >= perSector)
+                continue;
+            bySector[sector] = bySector.GetValueOrDefault(sector) + 1;
+            result.Add(pick);
+            if (result.Count == take)
+                break;
+        }
+
+        return result;
+    }
+
     // ---------------------------------------------------------------- signal track record
 
     /// <summary>
@@ -343,7 +514,7 @@ public sealed class MarketReports(MarketStore store, MarketRules rules)
         var dates = string.Join(", ", grid.Select(d => $"DATE '{d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}'"));
         var panel = store.Query($"""
             WITH grid AS (SELECT unnest([{dates}]) AS g),
-            sess AS (SELECT DISTINCT d FROM daily_bar WHERE trade_count > 0 AND d > $from AND d <= $to),
+            sess AS (SELECT d FROM ({EquitySessions}) WHERE d > $from AND d <= $to),
             pts AS (SELECT grid.g, sess.d AS s FROM grid ASOF JOIN sess ON grid.g >= sess.d),
             {WindowReturns(listedAtStart: false)},
             lv AS (

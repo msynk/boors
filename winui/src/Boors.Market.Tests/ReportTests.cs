@@ -47,6 +47,13 @@ public sealed class MarketReportsTests
         store.UpsertIndexBars([Index(YearAgo, 1_000), Index(AsOf, 1_500)], "history");
         store.UpsertMacroDaily([Usd(YearAgo, 100), Usd(AsOf, 150)]);
 
+        // A fixed-income fund also trades on Saturdays, when no share does (as through the 2026 closure): not a session.
+        store.UpsertInstruments([new Instrument { InsCode = 90, Symbol = "F90", Isin = "IRT1F0900001", Class = InstrumentClass.EtfFixedIncome }], AsOf, "yval");
+        store.UpsertDailyBars(Enumerable.Range(0, 60).Select(w => new ClassifiedBar(new DailyBar
+        {
+            InsCode = 90, Date = new DateOnly(2025, 1, 4).AddDays(7 * w), Close = 10, Last = 10, Yesterday = 10, TradeCount = 5, Volume = 1, Value = 10,
+        }, DayStatus.Traded)), "history");
+
         var report = reports.GetPerformance(PerformanceReportKind.TopPerformers, ReportPeriod.OneYear, minValue: 1_000_000, take: 10);
 
         Assert.AreEqual(AsOf, report.AsOf);
@@ -164,6 +171,66 @@ public sealed class MarketReportsTests
     }
 
     [TestMethod]
+    public void The_shortlist_ranks_each_horizon_by_its_own_rules_and_keeps_two_shares_per_sector()
+    {
+        // Six steady risers in one sector, a riser that crashed 60% in 2023, two wild swingers and three decliners.
+        var sessions = Weekdays(new DateOnly(2020, 3, 1), AsOf);
+        var crash = new DateOnly(2023, 6, 1);
+        AddEquitiesIn(ins => ins <= 6 ? "A" : $"S{ins}", Enumerable.Range(1, 12).Select(i => (long)i));
+        for (long ins = 1; ins <= 6; ins++)
+        {
+            var drift = 0.0020m + ins * 0.0002m;
+            AddPath(ins, sessions, i => i % 2 == 0 ? drift + 0.001m : drift - 0.001m, value: 1_000_000_000_000);
+        }
+
+        AddPath(7, sessions, i => sessions[i] == crash ? -0.60m : 0.003m, value: 1_000_000_000_000);
+        AddPath(8, sessions, i => i % 2 == 0 ? 0.06m : -0.052m, value: 1_000_000_000_000);
+        AddPath(9, sessions, i => i % 2 == 0 ? 0.05m : -0.042m, value: 1_000_000_000_000);
+        for (long ins = 10; ins <= 12; ins++)
+            AddPath(ins, sessions, i => -0.001m, value: 1_000_000_000_000);
+
+        // Monthly TEDPIX (+3%) and dollar (+2%): the steady risers (about +5% a month) beat both.
+        var months = Enumerable.Range(0, 72).Select(m => new DateOnly(2020, 2, 1).AddMonths(m)).Where(d => d <= AsOf).ToList();
+        store.UpsertIndexBars([.. months.Select((d, m) => Index(d, 1_000m * (decimal)Math.Pow(1.03, m)))], "history");
+        store.UpsertMacroDaily([.. months.Select((d, m) => Usd(d, 100m * (decimal)Math.Pow(1.02, m)))]);
+
+        var list = reports.GetShortlist();
+
+        Assert.AreEqual(AsOf, list.AsOf);
+        foreach (var horizon in new[] { list.ShortTerm, list.MidTerm, list.LongTerm })
+        {
+            Assert.IsLessThanOrEqualTo(2, horizon.Count(p => p.SectorCode == "A"));
+            Assert.IsTrue(horizon.All(p => p.Score is >= 0 and <= 100));
+            Assert.IsTrue(horizon.All(p => p.SinceThen is null)); // nothing follows the latest session
+        }
+
+        // Long: two steady risers (one sector) lead; the swingers never fell 50% and qualify behind them; the crash broke
+        // the 50% limit and the decliners lost to TEDPIX.
+        Assert.AreSequenceEqual(new[] { "A", "A" }, list.LongTerm.Take(2).Select(p => p.SectorCode).ToArray());
+        Assert.AreSequenceEqual(new[] { 1L, 2L, 3L, 4L, 5L, 6L, 8L, 9L }.Intersect(list.LongTerm.Select(p => p.InsCode)).Order().ToArray(),
+            list.LongTerm.Select(p => p.InsCode).Order().ToArray());
+        Assert.IsTrue(list.LongTerm.All(p => p.RecordYears == 5 && p.UsdWinRate >= 0.5 && p.MaxDrawdown >= -0.5));
+        Assert.DoesNotContain(7L, list.LongTerm.Select(p => p.InsCode));
+
+        // Mid: the dollar beaters only (no decliner); a share on two lists says so.
+        Assert.IsEmpty(list.MidTerm.Where(p => p.InsCode >= 10));
+        Assert.Contains(7L, list.MidTerm.Select(p => p.InsCode)); // a year after the crash it is a riser again
+        foreach (var pick in list.LongTerm.Where(p => list.MidTerm.Any(m => m.InsCode == p.InsCode)))
+            Assert.Contains(ShortlistHorizons.Mid, pick.AlsoIn);
+
+        // Short: last month's hottest share is left out.
+        var hottest = reports.GetPerformance(PerformanceReportKind.TopPerformers, ReportPeriod.OneMonth, minValue: MarketReports.ShortlistTradingValue).Rows[0].InsCode;
+        Assert.DoesNotContain(hottest, list.ShortTerm.Select(p => p.InsCode));
+        Assert.IsTrue(list.ShortTerm.All(p => p.Momentum12To1 is not null && p.Return1M is not null));
+
+        // On a past base date every pick shows what followed.
+        var past = reports.GetShortlist(asOf: AsOf.AddMonths(-6));
+        Assert.AreEqual(AsOf, past.Latest);
+        Assert.IsTrue(past.LongTerm.Concat(past.MidTerm).All(p => p.SinceThen is not null));
+        Assert.IsNotNull(past.TedpixSinceThen);
+    }
+
+    [TestMethod]
     public void A_persistent_trend_is_found_by_the_walk_forward_test_and_today_s_picks_follow_it()
     {
         // 50 shares with fixed drifts from −0.24% to +0.25% a session plus 1% noise: past winners keep winning.
@@ -257,7 +324,9 @@ public sealed class MarketReportsTests
         return days;
     }
 
-    private void AddEquities(params long[] codes) =>
+    private void AddEquities(params long[] codes) => AddEquitiesIn(ins => ins == 2 ? "44" : "27", codes);
+
+    private void AddEquitiesIn(Func<long, string> sector, IEnumerable<long> codes) =>
         store.UpsertInstruments(
             [.. codes.Select(ins => new Instrument
             {
@@ -266,7 +335,7 @@ public sealed class MarketReportsTests
                 Name = $"Company {ins}",
                 Isin = $"IRO1S{ins:000}0001",
                 Class = InstrumentClass.TseStock,
-                SectorCode = ins == 2 ? "44" : "27",
+                SectorCode = sector(ins),
                 TotalShares = 1_000_000,
             })], AsOf, "yval");
 

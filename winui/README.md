@@ -18,7 +18,7 @@ Everything under `winui/` is self-contained: no project, import, props file or r
 |---|---|
 | `src/Boors.Market` | Market-data library (copied from the boilerplate): TSETMC/Codal/tgju/fipiran clients with resilience, write-once raw cache, parsers, dated rules (`rules/rules.yaml`, embedded), day-status classifier, DuckDB `MarketStore`, collectors, analytics, TSETMC filter (Jint), data health |
 | `src/Boors.Market.Cli` | `boors` CLI (copied): probe, collect, rebuild, health, query, market views, cache bundles |
-| `src/Boors.Market.Tests` | 124 offline MSTest tests on captured golden files (copied, plus missed-session repair) and on hand-built price paths (reports) |
+| `src/Boors.Market.Tests` | 125 offline MSTest tests on captured golden files (copied, plus missed-session repair) and on hand-built price paths (reports) |
 | `src/Boors.Market.Services` | Application layer shared by node and desktop: API DTOs + source-generated JSON, the `IMarketApi` contract with **local** (in-process DuckDB) and **remote** (HTTP) implementations, the single-writer **job queue** + worker, the **Asia/Tehran scheduler**, **node sync** (bundle export/pull) |
 | `src/Boors.Market.Services.Tests` | 27 offline tests: cron/schedule and catch-up, queue, job logs and traffic, run statistics, API contract on an empty store, JSON shape, remote client error mapping, bundle pull |
 | `src/Boors.Node` | Minimal-API host of `IMarketApi` (+ GetJobs, ExportBundle, Pull), problem details, response compression, health checks, optional operator token |
@@ -51,7 +51,7 @@ the .NET SDK).
 dotnet build winui/Boors.WinUI.slnx -c Release
 
 # Tests (offline, Microsoft.Testing.Platform)
-cd winui/src/Boors.Market.Tests; dotnet test -c Release            # 124 tests
+cd winui/src/Boors.Market.Tests; dotnet test -c Release            # 125 tests
 cd winui/src/Boors.Market.Services.Tests; dotnet test -c Release   # 27 tests
 
 # CLI against a data folder (copy, never move, a .boors-data folder into winui/.boors-data — it is git-ignored)
@@ -73,7 +73,18 @@ DuckDB allows one process per store file: close the desktop before pointing the 
   `--data <dir>` or Settings → *Local store* override it (a restart applies a new folder). An empty store shows an
   empty state: the download in progress, or *Sync from node* when background download is off. Remote mode (Settings → *Data source*) reads a Boors.Node over HTTP instead.
 - **Reports** (`--page reports`, or `reports:<report>[:<base date>[:<custom start>]]` with report
-  `top|steady|dip|sectors|signals|seasonality` and dates `yyyy-MM-dd`; `MarketReports` in Boors.Market): *Top performers* over 1M, 3M, 6M, the Jalali year to date, 1Y, 3Y or 5Y, with the return in dollars
+  `shortlist|top|steady|dip|sectors|signals|seasonality` and dates `yyyy-MM-dd`; `MarketReports` in Boors.Market):
+  *Shortlist* (the first tab) — three lists of up to ten shares, at most two per sector, rebuilt from the store each
+  time the page loads or new data arrives: **short-term** (1–3 months: 12-month trend without the last month, return
+  per unit of risk, low volatility, closeness to the 52-week high; last month's hottest tenth and shares in buy queues
+  on over 30% of the last three months' sessions left out), **mid-term** (6–12 months: 1-year score, 12-month trend,
+  1-year dollar return, 3-year yearly return, shallow deepest fall; beat the dollar and up in at least half of the
+  months) and **long-term** (3–5 years: mean of the 5- and 3-year reliability scores; beat TEDPIX, won at least half
+  of the one-year holds against the dollar, never fell 50%, traded on 85% of sessions), with an *Also on* column for
+  shares on more than one list. At least 10 billion toman a day (5 for the long list). With a past base date it shows
+  what that day's lists did since (on the 2026-10-27 data, the lists taken a year earlier averaged +199% to +251%
+  against TEDPIX +153% — one sample, not a proof). These are screens, not forecasts: the signal track record found no
+  rule that reliably beats the average share after costs. *Top performers* over 1M, 3M, 6M, the Jalali year to date, 1Y, 3Y or 5Y, with the return in dollars
   and against TEDPIX, the deepest fall, volatility, up months, days in a buy queue and days traded; *Steady
   compounders*, ranked by a reliability score (the mean percentile of yearly return, return per unit of risk, up
   months, drawdown and — over 3 and 5 years — the share of one-year holds that beat the free-market dollar);
@@ -86,7 +97,8 @@ DuckDB allows one process per store file: close the desktop before pointing the 
   the average share, the dollar) with average, median and up-year rows. Shares must have traded before the window
   starts, and the first traded day of a listing never counts as a return: before a listing TSETMC carries a
   placeholder bar at the nominal 1,000 rials, so the first trade would read as +3,000% or more. The liquidity filter
-  is the average value traded per session over the last 20 sessions. On the 2026-10-17 data every report answers in
+  is the average value traded per session over the last 20 sessions. Sessions are days on which shares traded: funds
+  and bonds kept trading through the March–May 2026 closure, and those 45 days are not sessions of these reports. On the 2026-10-17 data every report answers in
   under a second (the 10-year signal test in 0.8 s).
   **Windows:** every report ends on a *base date* (a date picker, Jalali under Persian; empty = the latest session; a
   weekend or holiday falls back to the session before) and covers a preset period before it or a *Custom* range
@@ -153,6 +165,7 @@ dotnet publish winui/src/Boors.Desktop -c Release -o publish/desktop-sc -p:SelfC
 | `GET api/v1/Market/GetBreadth?sessions=` · `GetSectors?date=` · `GetMovers/{kind}?take=&date=` · `GetScreen/{kind}?take=` | same clamps and defaults as the boilerplate |
 | `GET api/v1/Market/GetIndexHistory/{insCode}?from=` · `GetMacroHistory/{series}?from=` · `Search?text=&take=` | |
 | `GET api/v1/Report/GetPerformance/{kind}?period=&take=&minValue=&asOf=&from=` | kind `TopPerformers`, `SteadyCompounders`, `QualityOnDip`; period `1m`, `3m`, `6m`, `ytd`, `1y` (default), `3y`, `5y`, or `custom` with `from`; `asOf` = base date (default the latest session); take 1–500 (default 50); `minValue` in rials per session; unknown kind or period, `custom` without `from`, or `from` ≥ `asOf` is a 400 problem |
+| `GET api/v1/Report/GetShortlist?asOf=` | the three horizon lists on a base date (about 2 s on the 2026-10-27 store) |
 | `GET api/v1/Report/GetSectorReturns?period=&minValue=&asOf=&from=` · `GetSignalTrackRecord?years=&asOf=&from=` · `GetSeasonality?asOf=&from=` | years 1–15 (default 5); `from` = whole months back from `asOf` (signals) or the first Jalali month shown (seasonality) |
 | `POST api/v1/Market/GetMarketWatch` | `{date, filter, classes, tradedOnly}`; a filter syntax error is a 400 problem |
 | `GET api/v1/Instrument/{GetMetrics,GetBars,GetFlows,GetEvents,GetShareholders,GetLetters,GetMessages}/{insCode}` | 404 problem for an unknown instrument |

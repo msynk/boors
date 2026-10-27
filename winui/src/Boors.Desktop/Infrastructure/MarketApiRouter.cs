@@ -83,6 +83,8 @@ public sealed class MarketApiRouter(IServiceProvider services, SettingsService s
 
     public Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken) => Api.GetSeasonalityAsync(asOf, from, cancellationToken);
 
+    public Task<ShortlistDto> GetShortlistAsync(string? asOf, CancellationToken cancellationToken) => Api.GetShortlistAsync(asOf, cancellationToken);
+
     public Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken) => Api.GetHealthAsync(cancellationToken);
 
     public Task<string> RunJobAsync(string job, CancellationToken cancellationToken) => Api.RunJobAsync(job, cancellationToken);

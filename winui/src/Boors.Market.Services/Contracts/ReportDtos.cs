@@ -100,3 +100,46 @@ public record SignalTrackRecordDto(DateOnly? AsOf, DateOnly? From, int Years, do
 public record SeasonalityYearDto(int Year, List<double?> Tedpix, List<double?> TedpixUsd, List<double?> EqualWeight, List<double?> Usd);
 
 public record SeasonalityReportDto(DateOnly? AsOf, int? CurrentYear, int? CurrentMonth, List<SeasonalityYearDto> Years);
+
+/// <summary>A share on a shortlist (Boors.Market.Analytics.ShortlistPick); <paramref name="AlsoIn"/> lists the other horizons (short, mid, long) holding it.</summary>
+public record ShortlistPickDto(
+    long InsCode,
+    string Symbol,
+    string? Name,
+    string? SectorCode,
+    string? SectorName,
+    double Score,
+    double? Return1M,
+    double? Return3M,
+    double? Return1Y,
+    double? UsdReturn1Y,
+    double? Momentum12To1,
+    double? RiskAdjusted,
+    double? Volatility,
+    double? FromHigh52Week,
+    double? AnnualizedReturn3Y,
+    int? RecordYears,
+    double? AnnualizedReturn,
+    double? UsdReturn,
+    double? UsdWinRate,
+    double? PositiveMonths,
+    double? MaxDrawdown,
+    decimal AverageValue20,
+    double? SinceThen,
+    List<string> AlsoIn);
+
+public record ShortlistDto(
+    DateOnly? AsOf,
+    DateOnly? Latest,
+    List<ShortlistPickDto> ShortTerm,
+    List<ShortlistPickDto> MidTerm,
+    List<ShortlistPickDto> LongTerm,
+    double? Tedpix3M,
+    double? Usd3M,
+    double? Tedpix1Y,
+    double? Usd1Y,
+    double? Tedpix5Y,
+    double? Usd5Y,
+    double? TedpixSinceThen,
+    double? UsdSinceThen,
+    int MissingHistory);

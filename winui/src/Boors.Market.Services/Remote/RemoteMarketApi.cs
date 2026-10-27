@@ -77,6 +77,9 @@ public sealed class RemoteMarketApi(HttpClient http, RemoteMarketApiOptions opti
     public async Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken) =>
         (await GetAsync($"api/v1/Report/GetSeasonality{Query(("asOf", asOf), ("from", from))}", Json.SeasonalityReportDto, cancellationToken))!;
 
+    public async Task<ShortlistDto> GetShortlistAsync(string? asOf, CancellationToken cancellationToken) =>
+        (await GetAsync($"api/v1/Report/GetShortlist{Query(("asOf", asOf))}", Json.ShortlistDto, cancellationToken))!;
+
     public async Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken) =>
         (await GetAsync("api/v1/MarketData/GetHealth", Json.MarketDataHealthDto, cancellationToken))!;
 

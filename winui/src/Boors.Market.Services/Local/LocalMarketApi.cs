@@ -220,6 +220,12 @@ public sealed class LocalMarketApi(
         return Run(() => Reports.GetSeasonality(window.AsOf, window.From).ToDto(), cancellationToken);
     }
 
+    public Task<ShortlistDto> GetShortlistAsync(string? asOf, CancellationToken cancellationToken)
+    {
+        var end = ParseDate(asOf);
+        return Run(() => Reports.GetShortlist(end).ToDto(), cancellationToken);
+    }
+
     public Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken) =>
         Run(() =>
         {

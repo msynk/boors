@@ -108,7 +108,7 @@ public sealed partial class ReportsPage : Page, IReloadable
     /// <summary>Columns first (they depend on the report), then the rows, in the order the report ranked them.</summary>
     private void ShowRows()
     {
-        var key = $"{ViewModel.ShownReport}|{ViewModel.ShownPast}";
+        var key = $"{ViewModel.ShownReport}|{ViewModel.ShownPast}|{ViewModel.ShownVariant}";
         if (key != columnsFor)
         {
             columnsFor = key;
@@ -117,6 +117,7 @@ public sealed partial class ReportsPage : Page, IReloadable
             Table.EmptyText = ViewModel.ShownReport switch
             {
                 ReportsViewModel.Dip => Loc.T("No steady compounder is on a dip right now."),
+                ReportsViewModel.Shortlist => Loc.T("No share passes this horizon's rules on this date."),
                 ReportsViewModel.Signals or ReportsViewModel.Seasonality => Loc.T("Not enough history for this report yet."),
                 _ => Loc.T("No share has enough history and liquidity for this period yet."),
             };
@@ -207,6 +208,9 @@ public sealed partial class ReportsPage : Page, IReloadable
             case RankedPerformanceRow r:
                 navigator.OpenSymbol(r.Row.InsCode);
                 break;
+            case RankedShortlistPick p:
+                navigator.OpenSymbol(p.Pick.InsCode);
+                break;
             case SectorReturnDto s:
                 // Switch the report first, so the tab's own selection change finds it already shown.
                 _ = ViewModel.ShowSectorAsync(s.SectorCode, s.SectorName);
@@ -233,6 +237,7 @@ public sealed partial class ReportsPage : Page, IReloadable
 
     private List<TableColumn> ColumnsFor(string report) => report switch
     {
+        ReportsViewModel.Shortlist => ShortlistColumns(ViewModel.ShownVariant),
         ReportsViewModel.Steady =>
         [
             .. Lead(),
@@ -309,6 +314,63 @@ public sealed partial class ReportsPage : Page, IReloadable
     };
 
     /// <summary>The symbol stays in view while scrolling sideways (the table freezes its first column), then the rank.</summary>
+    /// <summary>The columns of one shortlist horizon: what that list was ranked on, then trading facts.</summary>
+    private List<TableColumn> ShortlistColumns(string horizon)
+    {
+        List<TableColumn> columns =
+        [
+            Col.Of<RankedShortlistPick>(Loc.T("Symbol"), 96, r => r.Pick.Symbol, sort: r => r.Pick.Symbol, export: r => r.Pick.Symbol, exportHeader: "symbol"),
+            Col.Of<RankedShortlistPick>("#", 48, r => Fmt.Number(r.Rank), sort: r => r.Rank, numeric: true, export: r => Col.Inv(r.Rank), exportHeader: "rank"),
+            Col.Of<RankedShortlistPick>(Loc.T("Name"), 200, r => r.Pick.Name ?? string.Empty, sort: r => r.Pick.Name, export: r => r.Pick.Name, exportHeader: "name", fill: true),
+            Col.Of<RankedShortlistPick>(Loc.T("Sector"), 170, r => r.Pick.SectorName ?? r.Pick.SectorCode ?? string.Empty, sort: r => r.Pick.SectorName, export: r => r.Pick.SectorName, exportHeader: "sector"),
+            Col.Of<RankedShortlistPick>(Loc.T("Score"), 70, r => Fmt.Num(r.Pick.Score, "N0"), sort: r => r.Pick.Score, numeric: true, export: r => Col.Inv(r.Pick.Score), exportHeader: "score"),
+            Col.Of<RankedShortlistPick>(Loc.T("Also on"), 110, r => string.Join(" · ", r.Pick.AlsoIn.Select(ReportsViewModel.HorizonName)), sort: r => r.Pick.AlsoIn.Count, export: r => string.Join(' ', r.Pick.AlsoIn), exportHeader: "also_in"),
+        ];
+        if (ViewModel.ShownPast)
+            columns.Add(PickFraction(Loc.T("Since then"), p => p.SinceThen, "since_then"));
+
+        columns.AddRange(horizon switch
+        {
+            "short" =>
+            [
+                PickFraction(Loc.T("3M"), p => p.Return3M, "return_3m"),
+                PickFraction(Loc.T("1M"), p => p.Return1M, "return_1m"),
+                PickFraction(Loc.T("12-month trend (skipping the last month)"), p => p.Momentum12To1, "momentum_12_1", 140),
+                Col.Of<RankedShortlistPick>(Loc.T("Return / risk"), 96, r => r.Pick.RiskAdjusted is { } v ? Fmt.Num(v, "N2") : Fmt.Dash, sort: r => r.Pick.RiskAdjusted, numeric: true, export: r => Col.Inv(r.Pick.RiskAdjusted), exportHeader: "risk_adjusted"),
+                PickShare(Loc.T("Volatility"), p => p.Volatility, "volatility"),
+                PickFraction(Loc.T("From 52-week high"), p => p.FromHigh52Week, "from_high_52w", 120),
+            ],
+            "mid" =>
+            [
+                PickFraction(Loc.T("1Y"), p => p.Return1Y, "return_1y"),
+                PickFraction(Loc.T("In dollars"), p => p.UsdReturn1Y, "usd_return_1y"),
+                PickFraction(Loc.T("12-month trend (skipping the last month)"), p => p.Momentum12To1, "momentum_12_1", 140),
+                PickFraction(Loc.T("3 years, per year"), p => p.AnnualizedReturn3Y, "annualized_return_3y", 120),
+                PickShare(Loc.T("Up months"), p => p.PositiveMonths, "up_months"),
+                PickFraction(Loc.T("Deepest fall"), p => p.MaxDrawdown, "max_drawdown"),
+            ],
+            _ =>
+            [
+                Col.Of<RankedShortlistPick>(Loc.T("Record"), 80, r => r.Pick.RecordYears is { } y ? Loc.F("{0} years", Fmt.Number(y)) : Fmt.Dash, sort: r => r.Pick.RecordYears, numeric: true, export: r => Col.Inv(r.Pick.RecordYears), exportHeader: "record_years"),
+                PickFraction(Loc.T("Per year"), p => p.AnnualizedReturn, "annualized_return"),
+                PickFraction(Loc.T("In dollars"), p => p.UsdReturn, "usd_return"),
+                PickShare(Loc.T("1-year holds beating the dollar"), p => p.UsdWinRate, "usd_win_rate", 150),
+                PickShare(Loc.T("Up months"), p => p.PositiveMonths, "up_months"),
+                PickFraction(Loc.T("Deepest fall"), p => p.MaxDrawdown, "max_drawdown"),
+                PickFraction(Loc.T("From 52-week high"), p => p.FromHigh52Week, "from_high_52w", 120),
+            ],
+        });
+        columns.Add(Col.Of<RankedShortlistPick>(Loc.T("Value per session (billion toman)"), 150, r => Fmt.BillionToman(r.Pick.AverageValue20), sort: r => r.Pick.AverageValue20, numeric: true, export: r => Col.Inv(r.Pick.AverageValue20), exportHeader: "value20_rial"));
+        return columns;
+    }
+
+    private static TableColumn PickFraction(string header, Func<ShortlistPickDto, double?> value, string exportHeader, double width = 110) =>
+        Col.Of<RankedShortlistPick>(header, width, r => Fmt.FractionChange(value(r.Pick)), sort: r => value(r.Pick), tone: r => Fmt.ToneOf(value(r.Pick) * 100),
+            numeric: true, export: r => Col.Inv(value(r.Pick)), exportHeader: exportHeader);
+
+    private static TableColumn PickShare(string header, Func<ShortlistPickDto, double?> value, string exportHeader, double width = 96) =>
+        Col.Of<RankedShortlistPick>(header, width, r => Fmt.Percent(value(r.Pick), 0), sort: r => value(r.Pick), numeric: true, export: r => Col.Inv(value(r.Pick)), exportHeader: exportHeader);
+
     private static IEnumerable<TableColumn> Lead() =>
     [
         Col.Of<RankedPerformanceRow>(Loc.T("Symbol"), 96, r => r.Row.Symbol, sort: r => r.Row.Symbol, export: r => r.Row.Symbol, exportHeader: "symbol"),

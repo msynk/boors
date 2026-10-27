@@ -304,3 +304,93 @@ public sealed record SeasonalityReport(DateOnly? AsOf, int? CurrentYear, int? Cu
 {
     public static readonly SeasonalityReport Empty = new(null, null, null, []);
 }
+
+/// <summary>The horizons of <see cref="MarketReports.GetShortlist"/>.</summary>
+public static class ShortlistHorizons
+{
+    /// <summary>One to three months.</summary>
+    public const string Short = "short";
+
+    /// <summary>Six to twelve months.</summary>
+    public const string Mid = "mid";
+
+    /// <summary>Three to five years.</summary>
+    public const string Long = "long";
+}
+
+/// <summary>
+/// A share on a shortlist. Which measures are filled depends on the list: the short list uses the trend, the
+/// return per unit of risk, the volatility and the distance from the 52-week high; the mid list the 1-year score,
+/// returns (rial and dollar) and the 3-year yearly return; the long list its 5- or 3-year record.
+/// <see cref="PositiveMonths"/> and <see cref="MaxDrawdown"/> cover the list's own window (1 year for the short and
+/// mid lists, the record for the long list).
+/// </summary>
+public sealed record ShortlistPick
+{
+    public required long InsCode { get; init; }
+    public required string Symbol { get; init; }
+    public string? Name { get; init; }
+    public string? SectorCode { get; init; }
+    public string? SectorName { get; init; }
+
+    /// <summary>0–100: the list's composite (mean percentile of its measures within the candidates).</summary>
+    public double Score { get; init; }
+
+    public double? Return1M { get; init; }
+    public double? Return3M { get; init; }
+    public double? Return1Y { get; init; }
+    public double? UsdReturn1Y { get; init; }
+
+    /// <summary>The 12-month return without the latest month: (1 + 1Y) / (1 + 1M) − 1.</summary>
+    public double? Momentum12To1 { get; init; }
+
+    /// <summary>Over one year (see <see cref="PerformanceRow.RiskAdjusted"/>).</summary>
+    public double? RiskAdjusted { get; init; }
+
+    /// <summary>Over one year, annualised.</summary>
+    public double? Volatility { get; init; }
+
+    public double? FromHigh52Week { get; init; }
+    public double? AnnualizedReturn3Y { get; init; }
+
+    /// <summary>The long list's record: 5 years, or 3 for a share with a shorter history.</summary>
+    public int? RecordYears { get; init; }
+
+    public double? AnnualizedReturn { get; init; }
+    public double? UsdReturn { get; init; }
+    public double? UsdWinRate { get; init; }
+    public double? PositiveMonths { get; init; }
+    public double? MaxDrawdown { get; init; }
+    public decimal AverageValue20 { get; init; }
+
+    /// <summary>The return from the base date to the latest session, when the shortlist was taken in the past.</summary>
+    public double? SinceThen { get; init; }
+
+    /// <summary>The other horizons (<see cref="ShortlistHorizons"/>) whose list also holds this share.</summary>
+    public IReadOnlyList<string> AlsoIn { get; init; } = [];
+}
+
+/// <summary>
+/// The three horizon lists taken on one base date, with the benchmarks each list is measured against and, for a
+/// past base date, what TEDPIX and the dollar did since. <see cref="MissingHistory"/> counts shares traded in the
+/// last five years whose history does not reach back far enough for the long list.
+/// </summary>
+public sealed record Shortlist
+{
+    public static readonly Shortlist Empty = new();
+
+    public DateOnly? AsOf { get; init; }
+    public DateOnly? Latest { get; init; }
+    public IReadOnlyList<ShortlistPick> ShortTerm { get; init; } = [];
+    public IReadOnlyList<ShortlistPick> MidTerm { get; init; } = [];
+    public IReadOnlyList<ShortlistPick> LongTerm { get; init; } = [];
+    public double? Tedpix3M { get; init; }
+    public double? Usd3M { get; init; }
+    public double? Tedpix1Y { get; init; }
+    public double? Usd1Y { get; init; }
+    public double? Tedpix5Y { get; init; }
+    public double? Usd5Y { get; init; }
+    public double? TedpixSinceThen { get; init; }
+    public double? UsdSinceThen { get; init; }
+    public int MissingHistory { get; init; }
+}

@@ -70,6 +70,15 @@ public static class DtoMapping
         s.AsOf, s.CurrentYear, s.CurrentMonth,
         [.. s.Years.Select(y => new SeasonalityYearDto(y.Year, [.. y.Tedpix], [.. y.TedpixUsd], [.. y.EqualWeight], [.. y.Usd]))]);
 
+    public static ShortlistDto ToDto(this Shortlist s) => new(
+        s.AsOf, s.Latest, [.. s.ShortTerm.Select(ToDto)], [.. s.MidTerm.Select(ToDto)], [.. s.LongTerm.Select(ToDto)],
+        s.Tedpix3M, s.Usd3M, s.Tedpix1Y, s.Usd1Y, s.Tedpix5Y, s.Usd5Y, s.TedpixSinceThen, s.UsdSinceThen, s.MissingHistory);
+
+    public static ShortlistPickDto ToDto(this ShortlistPick p) => new(
+        p.InsCode, p.Symbol, p.Name, p.SectorCode, p.SectorName, p.Score, p.Return1M, p.Return3M, p.Return1Y, p.UsdReturn1Y, p.Momentum12To1,
+        p.RiskAdjusted, p.Volatility, p.FromHigh52Week, p.AnnualizedReturn3Y, p.RecordYears, p.AnnualizedReturn, p.UsdReturn, p.UsdWinRate,
+        p.PositiveMonths, p.MaxDrawdown, p.AverageValue20, p.SinceThen, [.. p.AlsoIn]);
+
     public static MarketWatchEntryDto ToDto(this MarketWatchEntry s) => new(
         s.InsCode, s.Symbol, s.Name, s.InstrumentClass, s.SectorCode, s.DayStatus, s.Close, s.ChangePercent, s.Last, s.LastChangePercent,
         s.Volume, s.Value, s.Trades, s.AllowedLow, s.AllowedHigh, s.Queue, s.QueueValue, s.PriceEarnings, s.MarketCap, s.IndividualNetValue,

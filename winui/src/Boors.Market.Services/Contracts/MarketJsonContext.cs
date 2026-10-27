@@ -31,6 +31,7 @@ namespace Boors.Market.Services.Contracts;
 [JsonSerializable(typeof(SectorReturnsReportDto))]
 [JsonSerializable(typeof(SignalTrackRecordDto))]
 [JsonSerializable(typeof(SeasonalityReportDto))]
+[JsonSerializable(typeof(ShortlistDto))]
 [JsonSerializable(typeof(JobQueueDto))]
 [JsonSerializable(typeof(JobInfoDto))]
 [JsonSerializable(typeof(JobDetailDto))]

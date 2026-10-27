@@ -81,6 +81,12 @@ public interface IMarketApi
     /// <summary>GET api/v1/Report/GetSeasonality?asOf=&amp;from= — monthly returns by Jalali month, up to <paramref name="asOf"/>, from the month of <paramref name="from"/>.</summary>
     Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// GET api/v1/Report/GetShortlist?asOf= — the short-, mid- and long-term shortlists on the base date
+    /// <paramref name="asOf"/> (default the latest session), with what each pick did since for a past date.
+    /// </summary>
+    Task<ShortlistDto> GetShortlistAsync(string? asOf, CancellationToken cancellationToken);
+
     /// <summary>GET api/v1/MarketData/GetHealth</summary>
     Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken);
 

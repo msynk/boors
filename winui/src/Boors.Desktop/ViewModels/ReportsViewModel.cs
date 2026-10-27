@@ -9,6 +9,9 @@ namespace Boors.Desktop.ViewModels;
 /// <summary>A ranked equity of a performance report (the rank stays with the row when another column is sorted).</summary>
 public sealed record RankedPerformanceRow(int Rank, PerformanceRowDto Row);
 
+/// <summary>A share on a shortlist, ranked within its horizon.</summary>
+public sealed record RankedShortlistPick(int Rank, ShortlistPickDto Pick);
+
 /// <summary>A current pick of a ranking rule, ranked.</summary>
 public sealed record RankedPick(int Rank, SignalPickDto Pick);
 
@@ -33,6 +36,7 @@ public sealed record ReportInfo(string Key, string Title, string Description, IR
 /// </summary>
 public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsViewModel> logger) : PageViewModel(api, logger)
 {
+    public const string Shortlist = "shortlist";
     public const string Top = "top";
     public const string Steady = "steady";
     public const string Dip = "dip";
@@ -50,10 +54,10 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
     private object? data;
 
     [ObservableProperty]
-    public partial string Report { get; set; } = Top;
+    public partial string Report { get; set; } = Shortlist;
 
     [ObservableProperty]
-    public partial string Period { get; set; } = "1y";
+    public partial string Period { get; set; } = "long";
 
     /// <summary>Minimum average value traded per session, in billion toman.</summary>
     [ObservableProperty]
@@ -82,6 +86,9 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
 
     /// <summary>True when the shown report's window ends before the latest session, so it carries "since then" figures.</summary>
     public bool ShownPast { get; private set; }
+
+    /// <summary>The shortlist horizon shown (empty for the other reports): its columns differ per horizon.</summary>
+    public string ShownVariant { get; private set; } = string.Empty;
 
     [ObservableProperty]
     public partial IReadOnlyList<object> Rows { get; set; } = [];
@@ -119,6 +126,7 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
 
     public static IReadOnlyList<ReportInfo> Reports =>
     [
+        new(Shortlist, Loc.T("Shortlist"), string.Empty, ["short", "mid", "long"], "long", false, false),
         new(Top, Loc.T("Top performers"),
             Loc.T("Shares ranked by total return over the period, with what the return cost: the deepest fall on the way, the volatility, how many days the share was locked in a buy queue (that part of the return could not be bought) and how often it traded. Only shares listed for the whole period and above the liquidity filter are ranked."),
             AllPeriods, "1y", true, true),
@@ -143,6 +151,9 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
 
     public static string PeriodLabel(string period) => period switch
     {
+        "short" => Loc.T("Short-term (1–3 months)"),
+        "mid" => Loc.T("Mid-term (6–12 months)"),
+        "long" => Loc.T("Long-term (3–5 years)"),
         Custom => Loc.T("Custom"),
         "all" => Loc.T("All"),
         _ => Loc.T(period.ToUpperInvariant()),
@@ -294,6 +305,7 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
         var preset = custom ? null : Period;
         var key = Report switch
         {
+            Shortlist => $"{Shortlist}|{end}",
             Seasonality => $"{Seasonality}|{end}|{from}",
             Signals => $"{Signals}|{end}|{from ?? preset}",
             _ => $"{Report}|{end}|{from ?? preset}|{Liquidity}",
@@ -302,6 +314,7 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
         {
             loaded = Report switch
             {
+                Shortlist => await Api.GetShortlistAsync(end, ct),
                 Signals => await Api.GetSignalTrackRecordAsync(custom ? 0 : YearsOf(Period), end, from, ct),
                 Seasonality => await Api.GetSeasonalityAsync(end, from, ct),
                 Sectors => await Api.GetSectorReturnsAsync(preset, MinValue, end, from, ct),
@@ -342,6 +355,7 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
         PerformanceReportDto p => (p.From, p.AsOf, p.Latest),
         SectorReturnsReportDto s => (s.From, s.AsOf, s.Latest),
         SignalTrackRecordDto t => (t.From, t.AsOf, null),
+        ShortlistDto l => (null, l.AsOf, l.Latest),
         _ => (null, null, null),
     };
 
@@ -369,8 +383,62 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
             case SeasonalityReportDto y:
                 BuildSeasonality(y);
                 break;
+            case ShortlistDto l:
+                BuildShortlist(l);
+                break;
         }
     }
+
+    /// <summary>One horizon of the shortlist, its rule in the description, and its benchmarks (or, for a past base date, the check of what followed).</summary>
+    private void BuildShortlist(ShortlistDto l)
+    {
+        var (picks, label, tedpix, usd, rule) = Period switch
+        {
+            "short" => (l.ShortTerm, Loc.T("3M"), l.Tedpix3M, l.Usd3M,
+                Loc.T("Strong 12-month trend, steady and calm rise, close to the 52-week high. Last month's hottest tenth and shares locked in buy queues on more than 30% of the last three months' sessions are left out; at least 10 billion toman traded a day. The weakest evidence of the three: no short-term rule beat the average share reliably in the signal track record.")),
+            "mid" => (l.MidTerm, Loc.T("1Y"), l.Tedpix1Y, l.Usd1Y,
+                Loc.T("The 1-year reliability score, the 12-month trend, the 1-year return in dollars, the 3-year yearly return and a shallow deepest fall, together. Every share beat the dollar over the year, rose in at least half of the months and traded at least 10 billion toman a day.")),
+            _ => (l.LongTerm, Loc.T("5Y"), l.Tedpix5Y, l.Usd5Y,
+                Loc.T("Ranked by the 5- and 3-year reliability scores. Every share beat TEDPIX, won at least half of its one-year holds against the dollar, never fell more than 50% and traded on at least 85% of the sessions (at least 5 billion toman a day).")),
+        };
+        Description = $"{rule} {Loc.T("At most two shares per sector. A screen, not a forecast: read the company's latest Codal letters before acting.")}";
+
+        var past = l.AsOf < l.Latest;
+        var overlap = picks.Count(p => p.AlsoIn.Count > 0);
+        List<KpiItem> kpis =
+        [
+            new($"{Loc.T("TEDPIX")} · {label}", Fmt.FractionChange(tedpix), Fmt.ToneOf(tedpix * 100), Note: Loc.T("The market's cap-weighted index")),
+            new($"{Loc.T("Free-market dollar")} · {label}", Fmt.FractionChange(usd), Fmt.ToneOf(usd * 100), Note: Loc.T("A share that did not beat this lost value in dollars")),
+            new(Loc.T("Also on another horizon"), Fmt.Ltr($"{Fmt.Number(overlap)} / {Fmt.Number(picks.Count)}"), Note: Loc.T("The sturdiest candidates show up on more than one list")),
+        ];
+        if (past)
+        {
+            var since = picks.Where(p => p.SinceThen is not null).Select(p => p.SinceThen!.Value).ToList();
+            double? average = since.Count > 0 ? since.Average() : null;
+            var after = Loc.F("{0} to {1}", Fmt.Date(l.AsOf), Fmt.Date(l.Latest));
+            kpis.Add(new(Loc.T("These picks since then"), Fmt.FractionChange(average), Fmt.ToneOf(average * 100), Note: $"{after} · {Loc.T("average of the list")}"));
+            kpis.Add(new(Loc.T("TEDPIX since then"), Fmt.FractionChange(l.TedpixSinceThen), Fmt.ToneOf(l.TedpixSinceThen * 100),
+                Note: $"{Loc.T("Free-market dollar")}: {Fmt.FractionChange(l.UsdSinceThen)}"));
+        }
+        else
+        {
+            kpis.Add(new(Loc.T("Shares without enough history"), Fmt.Number(l.MissingHistory),
+                Note: Loc.T("Not on the long list until the background download completes their history")));
+        }
+
+        Kpis = kpis;
+        Summary = l.AsOf is null ? string.Empty
+            : past ? Loc.F("Picked with data up to {0}; the Since then column shows what followed", Fmt.Date(l.AsOf))
+            : Loc.F("As of {0}; rebuilt whenever new market data arrives", Fmt.Date(l.AsOf));
+        Show([.. picks.Select((p, i) => new RankedShortlistPick(i + 1, p))]);
+    }
+
+    public static string HorizonName(string horizon) => horizon switch
+    {
+        "short" => Loc.T("Short"),
+        "mid" => Loc.T("Mid"),
+        _ => Loc.T("Long"),
+    };
 
     private void BuildPerformance(PerformanceReportDto p)
     {
@@ -525,8 +593,10 @@ public sealed partial class ReportsViewModel(IMarketApi api, ILogger<ReportsView
         {
             PerformanceReportDto p => p.AsOf < p.Latest,
             SectorReturnsReportDto s => s.AsOf < s.Latest,
+            ShortlistDto l => l.AsOf < l.Latest,
             _ => false,
         };
+        ShownVariant = data is ShortlistDto ? Period : string.Empty;
         Rows = rows;
     }
 

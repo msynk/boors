@@ -390,6 +390,39 @@ public static class FaStrings
         ["Years covered"] = "سال‌های پوشش‌داده‌شده",
         ["{0} {1} is month-to-date and left out of the summary rows"] = "{0} {1} هنوز تمام نشده و در سطرهای خلاصه حساب نشده است",
 
+        // Shortlist
+        ["Shortlist"] = "فهرست منتخب",
+        ["Short-term (1–3 months)"] = "کوتاه‌مدت (۱ تا ۳ ماه)",
+        ["Mid-term (6–12 months)"] = "میان‌مدت (۶ تا ۱۲ ماه)",
+        ["Long-term (3–5 years)"] = "بلندمدت (۳ تا ۵ سال)",
+        ["Strong 12-month trend, steady and calm rise, close to the 52-week high. Last month's hottest tenth and shares locked in buy queues on more than 30% of the last three months' sessions are left out; at least 10 billion toman traded a day. The weakest evidence of the three: no short-term rule beat the average share reliably in the signal track record."] =
+            "روند قوی ۱۲ ماهه، رشد پیوسته و آرام و نزدیکی به سقف ۵۲ هفته. یک‌دهم داغ‌ترین سهم‌های ماه گذشته و سهم‌هایی که در بیش از ۳۰٪ جلسه‌های سه ماه اخیر در صف خرید قفل بودند کنار گذاشته می‌شوند؛ دست‌کم ۱۰ میلیارد تومان معامله در روز. ضعیف‌ترین شواهد در میان سه فهرست: در کارنامه قواعد انتخاب هیچ قاعده کوتاه‌مدتی به‌طور قابل اتکا از میانگین سهام جلو نزد.",
+        ["The 1-year reliability score, the 12-month trend, the 1-year return in dollars, the 3-year yearly return and a shallow deepest fall, together. Every share beat the dollar over the year, rose in at least half of the months and traded at least 10 billion toman a day."] =
+            "امتیاز اطمینان یک‌ساله، روند ۱۲ ماهه، بازده دلاری یک‌ساله، بازده سالانه سه‌ساله و کم‌عمق بودن بیشترین افت، با هم. همه سهم‌ها در یک سال از دلار جلو زده‌اند، دست‌کم در نیمی از ماه‌ها رشد کرده‌اند و روزانه دست‌کم ۱۰ میلیارد تومان معامله شده‌اند.",
+        ["Ranked by the 5- and 3-year reliability scores. Every share beat TEDPIX, won at least half of its one-year holds against the dollar, never fell more than 50% and traded on at least 85% of the sessions (at least 5 billion toman a day)."] =
+            "رتبه‌بندی با امتیاز اطمینان پنج و سه‌ساله. همه سهم‌ها از شاخص کل جلو زده‌اند، دست‌کم در نیمی از نگهداری‌های یک‌ساله از دلار بهتر بوده‌اند، هرگز بیش از ۵۰٪ افت نکرده‌اند و در دست‌کم ۸۵٪ جلسه‌ها معامله شده‌اند (روزانه دست‌کم ۵ میلیارد تومان).",
+        ["At most two shares per sector. A screen, not a forecast: read the company's latest Codal letters before acting."] =
+            "حداکثر دو سهم از هر صنعت. یک غربال است، نه پیش‌بینی: پیش از هر اقدامی آخرین اطلاعیه‌های کدال شرکت را بخوانید.",
+        ["Also on another horizon"] = "در فهرست دیگری هم هست",
+        ["The sturdiest candidates show up on more than one list"] = "مقاوم‌ترین گزینه‌ها در بیش از یک فهرست می‌آیند",
+        ["These picks since then"] = "این منتخب‌ها از آن پس",
+        ["average of the list"] = "میانگین فهرست",
+        ["Shares without enough history"] = "سهم‌های بدون تاریخچه کافی",
+        ["Not on the long list until the background download completes their history"] =
+            "تا تکمیل تاریخچه با دریافت خودکار، در فهرست بلندمدت نمی‌آیند",
+        ["Picked with data up to {0}; the Since then column shows what followed"] =
+            "انتخاب با داده‌های تا {0}؛ ستون «از آن پس» نشان می‌دهد پس از آن چه شد",
+        ["As of {0}; rebuilt whenever new market data arrives"] = "تا تاریخ {0}؛ با رسیدن هر داده تازه بازار دوباره ساخته می‌شود",
+        ["Short"] = "کوتاه",
+        ["Mid"] = "میان",
+        ["Long"] = "بلند",
+        ["No share passes this horizon's rules on this date."] = "در این تاریخ هیچ سهمی از قواعد این بازه نمی‌گذرد.",
+        ["12-month trend (skipping the last month)"] = "روند ۱۲ ماهه (بدون ماه آخر)",
+        ["3 years, per year"] = "سه‌ساله، سالانه",
+        ["Record"] = "سابقه",
+        ["Also on"] = "در فهرست",
+        ["{0} years"] = "{0} سال",
+
         // Data health and operations
         ["Healthy"] = "سالم",
         ["Needs attention"] = "نیازمند بررسی",
