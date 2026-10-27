@@ -43,6 +43,33 @@ public static class DtoMapping
     public static ScreenRowDto ToDto(this ScreenRow s) =>
         new(s.InsCode, s.Symbol, s.Name, s.InstrumentClass, s.SectorCode, s.Score, s.Observations);
 
+    public static PerformanceReportDto ToDto(this PerformanceReport s) => new(
+        s.AsOf, s.Period.Key(), s.From, s.Sessions, s.TedpixReturn, s.MedianReturn, s.UsdReturn, s.CoinReturn, s.Universe, s.ShortHistory, s.Illiquid,
+        [.. s.Rows.Select(r => new PerformanceRowDto(
+            r.InsCode, r.Symbol, r.Name, r.InstrumentClass, r.SectorCode, r.SectorName, r.Close, r.Return, r.AnnualizedReturn, r.UsdReturn, r.ExcessReturn,
+            r.Volatility, r.RiskAdjusted, r.MaxDrawdown, r.PositiveMonths, r.UsdWinRate, r.FromHigh52Week, r.AverageValue20, r.PricedSessions, r.Coverage,
+            r.BuyQueueShare, r.Score, r.SinceThen))],
+        s.Latest, s.TedpixSinceThen, s.UsdSinceThen);
+
+    public static SectorReturnsReportDto ToDto(this SectorReturnsReport s) => new(
+        s.AsOf, s.Period.Key(), s.From, s.TedpixReturn, s.UsdReturn,
+        [.. s.Sectors.Select(x => new SectorReturnDto(
+            x.SectorCode, x.SectorName, x.Members, x.MedianReturn, x.AverageReturn, x.MedianUsdReturn, x.PositiveShare, x.BeatTedpixShare,
+            x.BestInsCode, x.BestSymbol, x.BestReturn, x.Value20, x.MedianSinceThen))],
+        s.Latest, s.TedpixSinceThen);
+
+    public static SignalTrackRecordDto ToDto(this SignalTrackRecord s) => new(
+        s.AsOf, s.From, s.Years, s.RoundTripCost,
+        [.. s.Signals.Select(v => new SignalVerdictDto(
+            v.Signal.ToString(), v.Months, v.TopReturn, v.UniverseReturn, v.BottomReturn, v.Excess, v.HitRate, v.TStat, v.InformationCoefficient,
+            v.Turnover, v.NetExcess, v.AnnualNetExcess, v.Verdict,
+            [.. v.History.Select(m => new SignalMonthDto(m.Date, m.Top, m.Universe, m.Bottom, m.InformationCoefficient, m.Turnover))],
+            [.. v.Picks.Select(p => new SignalPickDto(p.InsCode, p.Symbol, p.Name, p.SectorCode, p.Value))]))]);
+
+    public static SeasonalityReportDto ToDto(this SeasonalityReport s) => new(
+        s.AsOf, s.CurrentYear, s.CurrentMonth,
+        [.. s.Years.Select(y => new SeasonalityYearDto(y.Year, [.. y.Tedpix], [.. y.TedpixUsd], [.. y.EqualWeight], [.. y.Usd]))]);
+
     public static MarketWatchEntryDto ToDto(this MarketWatchEntry s) => new(
         s.InsCode, s.Symbol, s.Name, s.InstrumentClass, s.SectorCode, s.DayStatus, s.Close, s.ChangePercent, s.Last, s.LastChangePercent,
         s.Volume, s.Value, s.Trades, s.AllowedLow, s.AllowedHigh, s.Queue, s.QueueValue, s.PriceEarnings, s.MarketCap, s.IndividualNetValue,

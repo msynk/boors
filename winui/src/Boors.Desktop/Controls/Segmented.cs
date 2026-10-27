@@ -5,7 +5,11 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Boors.Desktop.Controls;
 
-/// <summary>A row of mutually exclusive toggle buttons (rial/dollar, class groups, chart ranges).</summary>
+/// <summary>
+/// A row of mutually exclusive toggle buttons (rial/dollar, class groups, chart ranges). Selection follows the buttons'
+/// checked state, so a click, the keyboard and UI Automation's Toggle (screen readers) all select; one option always
+/// stays selected.
+/// </summary>
 public sealed partial class Segmented : UserControl
 {
     private readonly StackPanel panel = new() { Orientation = Orientation.Horizontal, Spacing = 0 };
@@ -58,14 +62,20 @@ public sealed partial class Segmented : UserControl
                 CornerRadius = new CornerRadius(first ? 4 : 0, last ? 4 : 0, last ? 4 : 0, first ? 4 : 0),
                 Margin = new Thickness(first ? 0 : -1, 0, 0, 0),
             };
-            button.Click += (s, _) =>
+            button.Checked += (s, _) =>
             {
-                if (updating)
-                    return;
                 var key = (string)((ToggleButton)s).Tag;
+                if (updating || key == selectedKey)
+                    return;
                 selectedKey = key;
                 Sync();
                 SelectionChanged?.Invoke(this, key);
+            };
+            button.Unchecked += (s, _) =>
+            {
+                // The selected option cannot be switched off; restore it once the toggle has finished.
+                if (!updating && (string)((ToggleButton)s).Tag == selectedKey)
+                    DispatcherQueue.TryEnqueue(Sync);
             };
             buttons.Add(button);
             panel.Children.Add(button);

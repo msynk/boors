@@ -30,6 +30,8 @@ public sealed class LocalMarketApi(
 
     private MarketAnalytics Analytics => services.GetRequiredService<MarketAnalytics>();
 
+    private MarketReports Reports => services.GetRequiredService<MarketReports>();
+
     public Task<MarketOverviewDto?> GetOverviewAsync(string? date, CancellationToken cancellationToken)
     {
         var session = ParseDate(date);
@@ -190,6 +192,34 @@ public sealed class LocalMarketApi(
             .Select(m => new SupervisorMessageDto(m.Id, m.Date, m.Title, m.Body, m.Kind.ToString(), m.Reason.ToString(), m.ReopensWithoutLimit))
             .ToList(), cancellationToken);
 
+    public Task<PerformanceReportDto> GetPerformanceReportAsync(string kind, string? period, int take, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<PerformanceReportKind>(kind, ignoreCase: true, out var reportKind) || !Enum.IsDefined(reportKind))
+            throw MarketApiException.BadRequest($"Unknown report '{kind}'.");
+
+        var window = ParseWindow(period, asOf, from);
+        var limit = Math.Clamp(take == 0 ? 50 : take, 1, 500);
+        return Run(() => Reports.GetPerformance(reportKind, window.Period, Math.Max(0, minValue), limit, window.AsOf, window.From).ToDto(), cancellationToken);
+    }
+
+    public Task<SectorReturnsReportDto> GetSectorReturnsAsync(string? period, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken)
+    {
+        var window = ParseWindow(period, asOf, from);
+        return Run(() => Reports.GetSectorReturns(window.Period, Math.Max(0, minValue), window.AsOf, window.From).ToDto(), cancellationToken);
+    }
+
+    public Task<SignalTrackRecordDto> GetSignalTrackRecordAsync(int years, string? asOf, string? from, CancellationToken cancellationToken)
+    {
+        var window = ParseRange(asOf, from);
+        return Run(() => Reports.GetSignalTrackRecord(Math.Clamp(years == 0 ? 5 : years, 1, 15), asOf: window.AsOf, from: window.From).ToDto(), cancellationToken);
+    }
+
+    public Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken)
+    {
+        var window = ParseRange(asOf, from);
+        return Run(() => Reports.GetSeasonality(window.AsOf, window.From).ToDto(), cancellationToken);
+    }
+
     public Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken) =>
         Run(() =>
         {
@@ -249,6 +279,28 @@ public sealed class LocalMarketApi(
     private static Task<T> Run<T>(Func<T> work, CancellationToken cancellationToken) => Task.Run(work, cancellationToken);
 
     private static int Take(int take) => Math.Clamp(take == 0 ? 20 : take, 1, 500);
+
+    /// <summary>A report window: a start date makes it custom; custom without one, or a start on or after the end, is a 400.</summary>
+    private static (ReportPeriod Period, DateOnly? AsOf, DateOnly? From) ParseWindow(string? period, string? asOf, string? from)
+    {
+        var (end, start) = ParseRange(asOf, from);
+        var reportPeriod = start is not null ? ReportPeriod.Custom
+            : string.IsNullOrWhiteSpace(period) ? ReportPeriod.OneYear
+            : ReportPeriods.Keys.TryGetValue(period, out var p) ? p
+            : throw MarketApiException.BadRequest($"Unknown period '{period}' (expected {string.Join(", ", ReportPeriods.Keys.Keys)}).");
+        if (reportPeriod == ReportPeriod.Custom && start is null)
+            throw MarketApiException.BadRequest("A custom period needs its start date (from=yyyy-MM-dd).");
+        return (reportPeriod, end, start);
+    }
+
+    private static (DateOnly? AsOf, DateOnly? From) ParseRange(string? asOf, string? from)
+    {
+        var end = ParseDate(asOf);
+        var start = ParseDate(from);
+        if (start is { } s && end is { } e && s >= e)
+            throw MarketApiException.BadRequest($"The start date {from} must be before the end date {asOf}.");
+        return (end, start);
+    }
 
     public static DateOnly? ParseDate(string? date) =>
         string.IsNullOrWhiteSpace(date) ? null

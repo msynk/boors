@@ -33,6 +33,9 @@ public sealed class TableColumn
 
     public Func<object, string?>? Export { get; init; }
 
+    /// <summary>The row type the delegates expect (set by <see cref="Col.Of{T}"/>); rows of another type show blank cells.</summary>
+    public Type? RowType { get; init; }
+
     /// <summary>Numeric columns sort descending first, text columns ascending.</summary>
     public bool DescendingFirst => Numeric;
 }
@@ -53,6 +56,7 @@ public static class Col
         bool fill = false) => new()
     {
         Header = header,
+        RowType = typeof(T),
         Fill = fill,
         ExportHeader = exportHeader,
         Width = width,

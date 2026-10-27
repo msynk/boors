@@ -177,6 +177,7 @@ public sealed partial class ShellViewModel : ObservableObject
         yield return Go(Loc.T("Market overview"), Navigator.Overview, "");
         yield return Go(Loc.T("Market watch"), Navigator.Watch, "");
         yield return Go(Loc.T("Screens"), Navigator.Screens, "");
+        yield return Go(Loc.T("Reports"), Navigator.Reports, "");
         yield return Go(Loc.T("Data health"), Navigator.Health, "");
         yield return Go(Loc.T("Data collection"), Navigator.Jobs, "");
         yield return Go(Loc.T("Settings"), Navigator.Settings, "");

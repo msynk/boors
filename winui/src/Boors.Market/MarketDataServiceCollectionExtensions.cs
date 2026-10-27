@@ -52,6 +52,7 @@ public static class MarketDataServiceCollectionExtensions
         services.TryAddTransient<Contracts.SourceContracts>();
         services.TryAddTransient<Analytics.MarketAnalytics>();
         services.TryAddTransient<Analytics.MarketWatchService>();
+        services.TryAddTransient<Analytics.MarketReports>();
 
         AddSourceClient<TsetmcClient>(services, "tsetmc", o => o.TsetmcRequestsPerSecond);
         AddSourceClient<CodalClient>(services, "codal", o => o.CodalRequestsPerSecond);

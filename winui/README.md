@@ -4,8 +4,8 @@ A native Windows implementation of **Boors**, the analysis workstation for the I
 built with **WinUI 3 (Windows App SDK 2.5) and .NET 10**. It reuses the market-data layer of the original
 .NET + Blazor implementation (`boilerplate/src/Market`, copied here) and adds:
 
-- **Boors.Desktop** — the WinUI 3 workstation: overview, market watch (دیده‌بان), symbol workspace, screens, data
-  health and settings, Persian (RTL, Jalali, Persian digits) by default and English, dark/light, with an in-process
+- **Boors.Desktop** — the WinUI 3 workstation: overview, market watch (دیده‌بان), symbol workspace, screens, reports,
+  data health and settings, Persian (RTL, Jalali, Persian digits) by default and English, dark/light, with an in-process
   DuckDB store (the offline replica) or a remote node.
 - **Boors.Node** — a lean ASP.NET Core minimal-API node: the boilerplate's market API with the same routes and JSON,
   data health, the collection job queue with the Iran-time schedule, and raw-cache sync between nodes.
@@ -18,9 +18,9 @@ Everything under `winui/` is self-contained: no project, import, props file or r
 |---|---|
 | `src/Boors.Market` | Market-data library (copied from the boilerplate): TSETMC/Codal/tgju/fipiran clients with resilience, write-once raw cache, parsers, dated rules (`rules/rules.yaml`, embedded), day-status classifier, DuckDB `MarketStore`, collectors, analytics, TSETMC filter (Jint), data health |
 | `src/Boors.Market.Cli` | `boors` CLI (copied): probe, collect, rebuild, health, query, market views, cache bundles |
-| `src/Boors.Market.Tests` | 117 offline MSTest tests on captured golden files (copied, plus missed-session repair) |
+| `src/Boors.Market.Tests` | 124 offline MSTest tests on captured golden files (copied, plus missed-session repair) and on hand-built price paths (reports) |
 | `src/Boors.Market.Services` | Application layer shared by node and desktop: API DTOs + source-generated JSON, the `IMarketApi` contract with **local** (in-process DuckDB) and **remote** (HTTP) implementations, the single-writer **job queue** + worker, the **Asia/Tehran scheduler**, **node sync** (bundle export/pull) |
-| `src/Boors.Market.Services.Tests` | 26 offline tests: cron/schedule and catch-up, queue, job logs and traffic, run statistics, API contract on an empty store, JSON shape, remote client error mapping, bundle pull |
+| `src/Boors.Market.Services.Tests` | 27 offline tests: cron/schedule and catch-up, queue, job logs and traffic, run statistics, API contract on an empty store, JSON shape, remote client error mapping, bundle pull |
 | `src/Boors.Node` | Minimal-API host of `IMarketApi` (+ GetJobs, ExportBundle, Pull), problem details, response compression, health checks, optional operator token |
 | `src/Boors.Desktop` | WinUI 3 app (MVVM, DI, x:Bind), unpackaged + self-contained Windows App SDK, x64 |
 | `rules/rules.yaml` | Dated market rules (embedded into Boors.Market) |
@@ -51,8 +51,8 @@ the .NET SDK).
 dotnet build winui/Boors.WinUI.slnx -c Release
 
 # Tests (offline, Microsoft.Testing.Platform)
-cd winui/src/Boors.Market.Tests; dotnet test -c Release            # 117 tests
-cd winui/src/Boors.Market.Services.Tests; dotnet test -c Release   # 26 tests
+cd winui/src/Boors.Market.Tests; dotnet test -c Release            # 124 tests
+cd winui/src/Boors.Market.Services.Tests; dotnet test -c Release   # 27 tests
 
 # CLI against a data folder (copy, never move, a .boors-data folder into winui/.boors-data — it is git-ignored)
 dotnet run --project winui/src/Boors.Market.Cli -c Release -- --data winui/.boors-data health
@@ -72,6 +72,31 @@ DuckDB allows one process per store file: close the desktop before pointing the 
 - **Data:** local mode opens `%LOCALAPPDATA%\Boors\data\market.duckdb` (raw cache next to it); `BOORS_DATA`,
   `--data <dir>` or Settings → *Local store* override it (a restart applies a new folder). An empty store shows an
   empty state: the download in progress, or *Sync from node* when background download is off. Remote mode (Settings → *Data source*) reads a Boors.Node over HTTP instead.
+- **Reports** (`--page reports`, or `reports:<report>[:<base date>[:<custom start>]]` with report
+  `top|steady|dip|sectors|signals|seasonality` and dates `yyyy-MM-dd`; `MarketReports` in Boors.Market): *Top performers* over 1M, 3M, 6M, the Jalali year to date, 1Y, 3Y or 5Y, with the return in dollars
+  and against TEDPIX, the deepest fall, volatility, up months, days in a buy queue and days traded; *Steady
+  compounders*, ranked by a reliability score (the mean percentile of yearly return, return per unit of risk, up
+  months, drawdown and — over 3 and 5 years — the share of one-year holds that beat the free-market dollar);
+  *Quality on a dip* (score ≥ 60, beat TEDPIX, now ≥ 15% below the 52-week high); *Sector returns* (median and
+  average member, click a sector for its shares); *Signal track record*, a monthly walk-forward test of 11 ranking
+  rules over 3, 5 or 10 years (buyable shares only: priced that day, not in a buy queue, not in the least liquid 30%;
+  top fifth vs the average share, t-statistic, rank correlation, turnover, edge after the 1.43% list round trip; a
+  rule is marked as working only with t ≥ 2 and an edge left after costs) with the selected rule's growth against
+  the average share and today's picks; and *Seasonality*, monthly returns by Jalali month (TEDPIX, TEDPIX in dollars,
+  the average share, the dollar) with average, median and up-year rows. Shares must have traded before the window
+  starts, and the first traded day of a listing never counts as a return: before a listing TSETMC carries a
+  placeholder bar at the nominal 1,000 rials, so the first trade would read as +3,000% or more. The liquidity filter
+  is the average value traded per session over the last 20 sessions. On the 2026-10-17 data every report answers in
+  under a second (the 10-year signal test in 0.8 s).
+  **Windows:** every report ends on a *base date* (a date picker, Jalali under Persian; empty = the latest session; a
+  weekend or holiday falls back to the session before) and covers a preset period before it or a *Custom* range
+  (start picker). ◀ / ▶ step the window by its own length (the previous window ends where the shown one starts), so
+  consecutive periods can be compared; *Latest* returns to today. Everything — returns, risk, the liquidity filter,
+  the 52-week high, the score, the signal test and its picks — uses data up to the base date only. When the base date
+  is in the past the share reports add **Since then** (each share's return from the base date to the latest session,
+  never part of the ranking) and tiles for the first 20 rows, the median share and TEDPIX since then, so "did the
+  leaders keep leading?" is one glance; the sector report adds the median member since then. Seasonality offers all
+  years, the last 5 or 10, or the months from a custom start.
 - **Operations:** *Data health* shows dataset freshness, the last runs and source reachability, and *Sync from node*
   pulls another node's raw-cache bundle, imports it and replays it into the store.
 - **Data collection** (the job monitor; `--page jobs`): the running job live (progress line, elapsed time, HTTP
@@ -98,7 +123,7 @@ DuckDB allows one process per store file: close the desktop before pointing the 
   run jobs, sync), Ctrl+F symbol search in the title bar, F5 reload, Enter in the filter box applies it.
 - **Command line** (session overrides, not saved): `--lang fa|en`, `--theme dark|light|system`,
   `--digits persian|latin`, `--preset iranian|cb`, `--density pro|lite`, `--mode local|remote`, `--node-url <url>`,
-  `--page overview|watch|screens|health|jobs|settings|symbol:<insCode>`, `--data <dir>`, `--size WxH`, `--scroll Y`,
+  `--page overview|watch|screens|reports|reports:<report>[:<base date>[:<start>]]|health|jobs|settings|symbol:<insCode>`, `--data <dir>`, `--size WxH`, `--scroll Y`,
   `--exit-after-ms N` (closes N ms after the first page shows data; for startup measurements).
 - **Files:** settings `%LOCALAPPDATA%\Boors\settings.json`; structured logs (CLEF JSON lines)
   `%LOCALAPPDATA%\Boors\logs\desktop-yyyyMMdd.jsonl`; startup timings `...\logs\startup.txt`.
@@ -127,6 +152,8 @@ dotnet publish winui/src/Boors.Desktop -c Release -o publish/desktop-sc -p:SelfC
 | `GET api/v1/Market/GetOverview?date=` | 204 when the store is empty (as the boilerplate's MVC action) |
 | `GET api/v1/Market/GetBreadth?sessions=` · `GetSectors?date=` · `GetMovers/{kind}?take=&date=` · `GetScreen/{kind}?take=` | same clamps and defaults as the boilerplate |
 | `GET api/v1/Market/GetIndexHistory/{insCode}?from=` · `GetMacroHistory/{series}?from=` · `Search?text=&take=` | |
+| `GET api/v1/Report/GetPerformance/{kind}?period=&take=&minValue=&asOf=&from=` | kind `TopPerformers`, `SteadyCompounders`, `QualityOnDip`; period `1m`, `3m`, `6m`, `ytd`, `1y` (default), `3y`, `5y`, or `custom` with `from`; `asOf` = base date (default the latest session); take 1–500 (default 50); `minValue` in rials per session; unknown kind or period, `custom` without `from`, or `from` ≥ `asOf` is a 400 problem |
+| `GET api/v1/Report/GetSectorReturns?period=&minValue=&asOf=&from=` · `GetSignalTrackRecord?years=&asOf=&from=` · `GetSeasonality?asOf=&from=` | years 1–15 (default 5); `from` = whole months back from `asOf` (signals) or the first Jalali month shown (seasonality) |
 | `POST api/v1/Market/GetMarketWatch` | `{date, filter, classes, tradedOnly}`; a filter syntax error is a 400 problem |
 | `GET api/v1/Instrument/{GetMetrics,GetBars,GetFlows,GetEvents,GetShareholders,GetLetters,GetMessages}/{insCode}` | 404 problem for an unknown instrument |
 | `GET api/v1/MarketData/GetHealth` · `GetJobs` | health report; job queue + schedule (with next run times) + HTTP traffic per host since start |

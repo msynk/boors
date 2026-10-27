@@ -58,6 +58,29 @@ public interface IMarketApi
     /// <summary>GET api/v1/Instrument/GetMessages/{insCode}?take=</summary>
     Task<List<SupervisorMessageDto>> GetMessagesAsync(long insCode, int take, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// GET api/v1/Report/GetPerformance/{kind}?period=&amp;take=&amp;minValue=&amp;asOf=&amp;from= — kind: TopPerformers,
+    /// SteadyCompounders, QualityOnDip; period: 1m, 3m, 6m, ytd, 1y, 3y, 5y (default 1y), or custom with
+    /// <paramref name="from"/> (giving <paramref name="from"/> makes the window custom); <paramref name="asOf"/>: the
+    /// base date the window ends on (default the latest session; a non-session date falls back to the session before);
+    /// take default 50, 1–500; minValue: rials of average value traded per session over the 20 sessions up to the base
+    /// date (default 0). A start on or after the end is a 400.
+    /// </summary>
+    Task<PerformanceReportDto> GetPerformanceReportAsync(string kind, string? period, int take, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken);
+
+    /// <summary>GET api/v1/Report/GetSectorReturns?period=&amp;minValue=&amp;asOf=&amp;from= — the window as in <see cref="GetPerformanceReportAsync"/>.</summary>
+    Task<SectorReturnsReportDto> GetSectorReturnsAsync(string? period, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// GET api/v1/Report/GetSignalTrackRecord?years=&amp;asOf=&amp;from= — the monthly walk-forward test of every ranking
+    /// rule over <paramref name="years"/> (default 5, 1–15) or the whole months since <paramref name="from"/>, ending
+    /// (with the picks) at <paramref name="asOf"/>.
+    /// </summary>
+    Task<SignalTrackRecordDto> GetSignalTrackRecordAsync(int years, string? asOf, string? from, CancellationToken cancellationToken);
+
+    /// <summary>GET api/v1/Report/GetSeasonality?asOf=&amp;from= — monthly returns by Jalali month, up to <paramref name="asOf"/>, from the month of <paramref name="from"/>.</summary>
+    Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken);
+
     /// <summary>GET api/v1/MarketData/GetHealth</summary>
     Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken);
 

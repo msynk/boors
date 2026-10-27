@@ -34,6 +34,14 @@ public static class NodeEndpoints
         instrument.MapGet("GetLetters/{insCode:long}", (long insCode, int? take, IMarketApi api, CancellationToken ct) => api.GetLettersAsync(insCode, take ?? 0, ct));
         instrument.MapGet("GetMessages/{insCode:long}", (long insCode, int? take, IMarketApi api, CancellationToken ct) => api.GetMessagesAsync(insCode, take ?? 0, ct));
 
+        var report = app.MapGroup("api/v1/Report").WithTags("Report");
+        report.MapGet("GetPerformance/{kind}", (string kind, string? period, int? take, decimal? minValue, string? asOf, string? from, IMarketApi api, CancellationToken ct) =>
+            api.GetPerformanceReportAsync(kind, period, take ?? 0, minValue ?? 0, asOf, from, ct));
+        report.MapGet("GetSectorReturns", (string? period, decimal? minValue, string? asOf, string? from, IMarketApi api, CancellationToken ct) =>
+            api.GetSectorReturnsAsync(period, minValue ?? 0, asOf, from, ct));
+        report.MapGet("GetSignalTrackRecord", (int? years, string? asOf, string? from, IMarketApi api, CancellationToken ct) => api.GetSignalTrackRecordAsync(years ?? 0, asOf, from, ct));
+        report.MapGet("GetSeasonality", (string? asOf, string? from, IMarketApi api, CancellationToken ct) => api.GetSeasonalityAsync(asOf, from, ct));
+
         var marketData = app.MapGroup("api/v1/MarketData").WithTags("MarketData");
         marketData.MapGet("GetHealth", (IMarketApi api, CancellationToken ct) => api.GetHealthAsync(ct));
         marketData.MapGet("GetJobs", (IMarketApi api, CancellationToken ct) => api.GetJobsAsync(ct));

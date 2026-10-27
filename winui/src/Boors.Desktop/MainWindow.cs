@@ -99,7 +99,7 @@ public sealed partial class MainWindow : Window
         if (change.HasFlag(SettingsChange.Language) || change.HasFlag(SettingsChange.Appearance) || change.HasFlag(SettingsChange.Density))
         {
             // Rebuild the shell and show the same page: labels, direction, digits, colours and row heights all follow.
-            foreach (var vm in new PageViewModel[] { App.Get<OverviewViewModel>(), App.Get<MarketWatchViewModel>(), App.Get<SymbolViewModel>(), App.Get<ScreensViewModel>(), App.Get<HealthViewModel>() })
+            foreach (var vm in new PageViewModel[] { App.Get<OverviewViewModel>(), App.Get<MarketWatchViewModel>(), App.Get<SymbolViewModel>(), App.Get<ScreensViewModel>(), App.Get<ReportsViewModel>(), App.Get<HealthViewModel>() })
             {
                 App.ApplyCulture(settings.Current);
                 vm.Refresh();

@@ -128,6 +128,7 @@ public partial class App : Application
         services.AddSingleton<MarketWatchViewModel>();
         services.AddSingleton<SymbolViewModel>();
         services.AddSingleton<ScreensViewModel>();
+        services.AddSingleton<ReportsViewModel>();
         services.AddSingleton<HealthViewModel>();
         services.AddSingleton<JobsViewModel>();
         services.AddSingleton<SettingsViewModel>();

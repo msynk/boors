@@ -53,6 +53,32 @@ public sealed class ApiTests
     }
 
     [TestMethod]
+    public async Task EmptyStoreAnswersEveryReportAndRejectsUnknownKindsAndPeriods()
+    {
+        var (host, _) = LocalHost();
+        using var _ = host;
+        var api = host.Services.GetRequiredService<IMarketApi>();
+        var ct = TestContext.CancellationToken;
+
+        var performance = await api.GetPerformanceReportAsync("steadycompounders", "3y", 0, 0, null, null, ct);
+        Assert.IsNull(performance.AsOf);
+        Assert.AreEqual("3y", performance.Period);
+        Assert.IsEmpty(performance.Rows);
+        Assert.AreEqual("1y", (await api.GetSectorReturnsAsync(null, 0, null, null, ct)).Period);
+        Assert.AreEqual("custom", (await api.GetSectorReturnsAsync("6m", 0, "2026-10-17", "2026-01-01", ct)).Period);
+        Assert.IsEmpty((await api.GetSignalTrackRecordAsync(0, null, null, ct)).Signals);
+        Assert.IsEmpty((await api.GetSeasonalityAsync(null, null, ct)).Years);
+
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("Best", "1y", 0, 0, null, null, ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("TopPerformers", "2y", 0, 0, null, null, ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetSectorReturnsAsync("week", 0, null, null, ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("TopPerformers", "custom", 0, 0, null, null, ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetPerformanceReportAsync("TopPerformers", null, 0, 0, "2026-01-01", "2026-01-01", ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetSignalTrackRecordAsync(0, "2026-01-01", "2026-06-01", ct)).StatusCode);
+        Assert.AreEqual(400, Assert.ThrowsExactly<MarketApiException>(() => api.GetSeasonalityAsync("1405/07/25", null, ct)).StatusCode);
+    }
+
+    [TestMethod]
     public void ParseDateAcceptsOnlyIsoDates()
     {
         Assert.AreEqual(new DateOnly(2026, 10, 17), LocalMarketApi.ParseDate("2026-10-17"));
@@ -80,6 +106,7 @@ public sealed class ApiTests
         {
             "/api/v1/Market/GetOverview" => new HttpResponseMessage(HttpStatusCode.NoContent),
             "/api/v1/Market/GetMovers/nope" => Json(HttpStatusCode.BadRequest, """{"title":"Bad request","status":400,"detail":"Unknown movers kind 'nope'."}"""),
+            "/api/v1/Report/GetPerformance/SteadyCompounders" => Json(HttpStatusCode.OK, """{"asOf":"2026-10-17","period":"5y","sessions":1138,"universe":1,"rows":[{"insCode":7,"symbol":"افق","return":18.99,"maxDrawdown":-0.21,"averageValue20":461000000000,"coverage":0.91,"score":99.2}]}"""),
             "/api/v1/MarketData/RunJob/eod" => request.Headers.Authorization?.Parameter == "t0ken"
                 ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("20261019-1-eod", Encoding.UTF8, "text/plain") }
                 : Json(HttpStatusCode.Unauthorized, """{"title":"Unauthorized","status":401}"""),
@@ -93,6 +120,10 @@ public sealed class ApiTests
         Assert.AreEqual(400, problem.StatusCode);
         Assert.AreEqual("Unknown movers kind 'nope'.", problem.Message);
         Assert.AreEqual("20261019-1-eod", await api.RunJobAsync("eod", ct));
+        var steady = await api.GetPerformanceReportAsync("SteadyCompounders", "5y", 0, 50_000_000_000m, "2025-10-17", null, ct);
+        Assert.AreEqual("/api/v1/Report/GetPerformance/SteadyCompounders?period=5y&minValue=50000000000&asOf=2025-10-17", handler.Requests[^1]);
+        Assert.AreEqual(99.2, steady.Rows.Single().Score);
+        Assert.IsNull(steady.Rows.Single().UsdReturn);
         var series = await api.GetIndexHistoryAsync(32097828799138957, "2026-10-01", ct);
         Assert.AreEqual(8265156.65m, series.Single().Value);
         Assert.AreEqual("/api/v1/Market/GetIndexHistory/32097828799138957?from=2026-10-01", handler.Requests[^1]);

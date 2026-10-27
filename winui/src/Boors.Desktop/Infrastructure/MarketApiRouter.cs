@@ -72,6 +72,17 @@ public sealed class MarketApiRouter(IServiceProvider services, SettingsService s
 
     public Task<List<SupervisorMessageDto>> GetMessagesAsync(long insCode, int take, CancellationToken cancellationToken) => Api.GetMessagesAsync(insCode, take, cancellationToken);
 
+    public Task<PerformanceReportDto> GetPerformanceReportAsync(string kind, string? period, int take, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken) =>
+        Api.GetPerformanceReportAsync(kind, period, take, minValue, asOf, from, cancellationToken);
+
+    public Task<SectorReturnsReportDto> GetSectorReturnsAsync(string? period, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken) =>
+        Api.GetSectorReturnsAsync(period, minValue, asOf, from, cancellationToken);
+
+    public Task<SignalTrackRecordDto> GetSignalTrackRecordAsync(int years, string? asOf, string? from, CancellationToken cancellationToken) =>
+        Api.GetSignalTrackRecordAsync(years, asOf, from, cancellationToken);
+
+    public Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken) => Api.GetSeasonalityAsync(asOf, from, cancellationToken);
+
     public Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken) => Api.GetHealthAsync(cancellationToken);
 
     public Task<string> RunJobAsync(string job, CancellationToken cancellationToken) => Api.RunJobAsync(job, cancellationToken);

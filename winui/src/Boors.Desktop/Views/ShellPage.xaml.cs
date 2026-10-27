@@ -44,9 +44,18 @@ public sealed partial class ShellPage : Page
         {
             navigator.Frame = ContentFrame;
             if (startPage.StartsWith("symbol:", StringComparison.OrdinalIgnoreCase) && long.TryParse(startPage[7..], CultureInfo.InvariantCulture, out var insCode))
+            {
                 navigator.OpenSymbol(insCode);
+            }
+            else if (startPage.StartsWith("reports:", StringComparison.OrdinalIgnoreCase))
+            {
+                App.Get<ReportsViewModel>().Preselect(startPage[8..]);
+                navigator.Navigate(Navigator.Reports);
+            }
             else
+            {
                 navigator.Navigate(startPage);
+            }
         }
         else
         {

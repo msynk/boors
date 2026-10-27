@@ -21,7 +21,9 @@ namespace Boors.Desktop.Controls;
 /// The header sticks to the top and the first column can be frozen; both follow the scroll offset on the composition
 /// thread (expression animations on the ScrollViewer's manipulation property set), so they never lag or jitter.
 /// Sorting runs on a pool thread. In a right-to-left page the whole grid mirrors (symbol column on the right) while
-/// numeric cells stay left to right.
+/// numeric cells stay left to right. <see cref="Columns"/> may change at any time (the Reports page swaps them per
+/// report): every row is built for one column set, and a new set gets a new repeater, so no recycled row of the old
+/// set is ever measured or bound against the new one.
 /// </summary>
 public sealed partial class DataTable : UserControl
 {
@@ -32,9 +34,9 @@ public sealed partial class DataTable : UserControl
 
     private readonly ScrollViewer scroller;
     private readonly StackPanel stack;
-    private readonly ItemsRepeater repeater;
     private readonly TextBlock empty;
-    private readonly RowFactory factory;
+    private ItemsRepeater repeater;
+    private RowFactory factory;
     private TableRow? header;
     private IReadOnlyList<TableColumn> columns = [];
     private List<object> source = [];
@@ -48,12 +50,7 @@ public sealed partial class DataTable : UserControl
     public DataTable()
     {
         factory = new RowFactory(this);
-        repeater = new ItemsRepeater
-        {
-            Layout = new StackLayout { Orientation = Orientation.Vertical },
-            ItemTemplate = factory,
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
+        repeater = NewRepeater(factory);
         stack = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = HorizontalAlignment.Left };
         stack.Children.Add(repeater);
         scroller = new ScrollViewer
@@ -104,11 +101,25 @@ public sealed partial class DataTable : UserControl
             columns = value;
             ComputeOffsets();
             BuildHeader();
-            factory.Clear();
+
+            // A fresh repeater and factory: the old repeater keeps its realized and recycled rows (built for the old
+            // columns) and would measure or reuse them against the new offsets. It leaves the tree with them.
             repeater.ItemsSource = null;
+            stack.Children.Remove(repeater);
+            factory = new RowFactory(this);
+            repeater = NewRepeater(factory);
+            repeater.Width = TotalWidth;
+            stack.Children.Add(repeater);
             repeater.ItemsSource = view;
         }
     }
+
+    private static ItemsRepeater NewRepeater(RowFactory rows) => new()
+    {
+        Layout = new StackLayout { Orientation = Orientation.Vertical },
+        ItemTemplate = rows,
+        HorizontalAlignment = HorizontalAlignment.Left,
+    };
 
     /// <summary>1 freezes the first column (the symbol) while scrolling horizontally.</summary>
     public int FrozenColumns { get; set; }
@@ -378,7 +389,10 @@ public sealed partial class DataTable : UserControl
 
         public UIElement GetElement(ElementFactoryGetArgs args)
         {
-            if (!pool.TryPop(out var row))
+            TableRow? row = null;
+            while (row is null && pool.TryPop(out var pooled))
+                row = pooled.IsCurrent ? pooled : null;
+            if (row is null)
             {
                 row = new TableRow(owner, isHeader: false);
                 all.Add(row);
@@ -390,7 +404,7 @@ public sealed partial class DataTable : UserControl
 
         public void RecycleElement(ElementFactoryRecycleArgs args)
         {
-            if (args.Element is TableRow row)
+            if (args.Element is TableRow { IsCurrent: true } row)
                 pool.Push(row);
         }
 
@@ -409,11 +423,6 @@ public sealed partial class DataTable : UserControl
             }
         }
 
-        public void Clear()
-        {
-            all.Clear();
-            pool.Clear();
-        }
     }
 
     /// <summary>One row: a panel that places its cells at the column offsets (no Grid, no measuring of text widths).</summary>
@@ -422,6 +431,7 @@ public sealed partial class DataTable : UserControl
         private const double Padding = 8;
         private readonly DataTable owner;
         private readonly bool isHeader;
+        private readonly IReadOnlyList<TableColumn> columns;
         private readonly TextBlock[] texts;
         private readonly Border?[] tags;
         private readonly Border? frozen;
@@ -433,7 +443,7 @@ public sealed partial class DataTable : UserControl
         {
             this.owner = owner;
             this.isHeader = isHeader;
-            var columns = owner.columns;
+            columns = owner.columns;
             texts = new TextBlock[columns.Count];
             tags = new Border?[columns.Count];
             Height = isHeader ? Math.Max(owner.RowHeight + 8, 2 * (owner.CellFontSize + 2) + 8) : owner.RowHeight;
@@ -530,6 +540,9 @@ public sealed partial class DataTable : UserControl
             FreezeFirstCell();
         }
 
+        /// <summary>False once the table's columns changed: the row belongs to the old set and must not be reused.</summary>
+        public bool IsCurrent => ReferenceEquals(columns, owner.columns);
+
         public void FreezeFirstCell()
         {
             if (frozen is null || frozenAttached || owner.stickyX is null)
@@ -544,11 +557,21 @@ public sealed partial class DataTable : UserControl
             if (data is null)
                 return;
 
-            var columns = owner.columns;
             for (var i = 0; i < columns.Count; i++)
             {
                 var column = columns[i];
                 var text = texts[i];
+
+                // A row object of another shape (rows and columns are swapped one after the other) shows blank cells
+                // until its own columns arrive, instead of failing a cast in the middle of layout.
+                if (column.RowType is { } type && !type.IsInstanceOfType(data))
+                {
+                    text.Text = string.Empty;
+                    if (tags[i] is { } hidden)
+                        hidden.Visibility = Visibility.Collapsed;
+                    continue;
+                }
+
                 if (column.Tag is { } tag)
                 {
                     var value = tag(data);
@@ -575,7 +598,6 @@ public sealed partial class DataTable : UserControl
 
         public void ShowSort(int column, bool descending)
         {
-            var columns = owner.columns;
             for (var i = 0; i < columns.Count; i++)
                 texts[i].Text = i == column ? $"{columns[i].Header} {(descending ? "▼" : "▲")}" : columns[i].Header;
         }
@@ -619,7 +641,9 @@ public sealed partial class DataTable : UserControl
         protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
         {
             var offsets = owner.ColumnOffsets;
-            for (var i = 0; i < Children.Count; i++)
+            if (!IsCurrent)
+                return default;
+            for (var i = 0; i < Math.Min(Children.Count, offsets.Length - 1); i++)
                 Children[i].Measure(new Windows.Foundation.Size(Math.Max(0, offsets[i + 1] - offsets[i] - 2 * Padding), Height));
             return new Windows.Foundation.Size(owner.TotalWidth, Height);
         }
@@ -627,7 +651,9 @@ public sealed partial class DataTable : UserControl
         protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize)
         {
             var offsets = owner.ColumnOffsets;
-            for (var i = 0; i < Children.Count; i++)
+            if (!IsCurrent)
+                return finalSize;
+            for (var i = 0; i < Math.Min(Children.Count, offsets.Length - 1); i++)
             {
                 var width = offsets[i + 1] - offsets[i];
                 if (i == 0 && frozen is not null)

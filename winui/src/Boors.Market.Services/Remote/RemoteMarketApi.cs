@@ -65,6 +65,18 @@ public sealed class RemoteMarketApi(HttpClient http, RemoteMarketApiOptions opti
     public Task<List<SupervisorMessageDto>> GetMessagesAsync(long insCode, int take, CancellationToken cancellationToken) =>
         GetListAsync($"api/v1/Instrument/GetMessages/{insCode}{Query(("take", Int(take)))}", Json.ListSupervisorMessageDto, cancellationToken);
 
+    public async Task<PerformanceReportDto> GetPerformanceReportAsync(string kind, string? period, int take, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken) =>
+        (await GetAsync($"api/v1/Report/GetPerformance/{Uri.EscapeDataString(kind)}{Query(("period", period), ("take", Int(take)), ("minValue", Dec(minValue)), ("asOf", asOf), ("from", from))}", Json.PerformanceReportDto, cancellationToken))!;
+
+    public async Task<SectorReturnsReportDto> GetSectorReturnsAsync(string? period, decimal minValue, string? asOf, string? from, CancellationToken cancellationToken) =>
+        (await GetAsync($"api/v1/Report/GetSectorReturns{Query(("period", period), ("minValue", Dec(minValue)), ("asOf", asOf), ("from", from))}", Json.SectorReturnsReportDto, cancellationToken))!;
+
+    public async Task<SignalTrackRecordDto> GetSignalTrackRecordAsync(int years, string? asOf, string? from, CancellationToken cancellationToken) =>
+        (await GetAsync($"api/v1/Report/GetSignalTrackRecord{Query(("years", Int(years)), ("asOf", asOf), ("from", from))}", Json.SignalTrackRecordDto, cancellationToken))!;
+
+    public async Task<SeasonalityReportDto> GetSeasonalityAsync(string? asOf, string? from, CancellationToken cancellationToken) =>
+        (await GetAsync($"api/v1/Report/GetSeasonality{Query(("asOf", asOf), ("from", from))}", Json.SeasonalityReportDto, cancellationToken))!;
+
     public async Task<MarketDataHealthDto> GetHealthAsync(CancellationToken cancellationToken) =>
         (await GetAsync("api/v1/MarketData/GetHealth", Json.MarketDataHealthDto, cancellationToken))!;
 
@@ -143,6 +155,8 @@ public sealed class RemoteMarketApi(HttpClient http, RemoteMarketApiOptions opti
     }
 
     private static string? Int(int value) => value == 0 ? null : value.ToString(CultureInfo.InvariantCulture);
+
+    private static string? Dec(decimal value) => value == 0 ? null : value.ToString(CultureInfo.InvariantCulture);
 
     private static string Query(params (string Name, string? Value)[] parameters)
     {

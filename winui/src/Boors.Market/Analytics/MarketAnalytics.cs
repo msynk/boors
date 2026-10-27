@@ -19,9 +19,9 @@ public sealed class MarketAnalytics(MarketStore store)
 
     public const string FundClasses = "('etf_equity', 'etf_fixed_income', 'etf_real_estate', 'etf_mixed', 'fund_leveraged', 'fund_gold_silver', 'fund_of_funds')";
 
-    private const string Equity = $"i.parent_ins_code IS NULL AND i.instrument_class IN {EquityClasses}";
+    internal const string Equity = $"i.parent_ins_code IS NULL AND i.instrument_class IN {EquityClasses}";
 
-    private const string Return = """
+    internal const string Return = """
         CASE WHEN b.trade_count > 0 AND b.yesterday > 0 AND b.day_status IN ('Traded', 'ReopenAuction', 'QueueLockedUp', 'QueueLockedDown')
              THEN CAST(b.close AS DOUBLE) / CAST(b.yesterday AS DOUBLE) - 1 END
         """;
