@@ -18,9 +18,9 @@ Everything under `winui/` is self-contained: no project, import, props file or r
 |---|---|
 | `src/Boors.Market` | Market-data library (copied from the boilerplate): TSETMC/Codal/tgju/fipiran clients with resilience, write-once raw cache, parsers, dated rules (`rules/rules.yaml`, embedded), day-status classifier, DuckDB `MarketStore`, collectors, analytics, TSETMC filter (Jint), data health |
 | `src/Boors.Market.Cli` | `boors` CLI (copied): probe, collect, rebuild, health, query, market views, cache bundles |
-| `src/Boors.Market.Tests` | 115 offline MSTest tests on captured golden files (copied) |
+| `src/Boors.Market.Tests` | 117 offline MSTest tests on captured golden files (copied, plus missed-session repair) |
 | `src/Boors.Market.Services` | Application layer shared by node and desktop: API DTOs + source-generated JSON, the `IMarketApi` contract with **local** (in-process DuckDB) and **remote** (HTTP) implementations, the single-writer **job queue** + worker, the **Asia/Tehran scheduler**, **node sync** (bundle export/pull) |
-| `src/Boors.Market.Services.Tests` | 12 offline tests: cron/schedule, queue, API contract on an empty store, JSON shape, remote client error mapping, bundle pull |
+| `src/Boors.Market.Services.Tests` | 26 offline tests: cron/schedule and catch-up, queue, job logs and traffic, run statistics, API contract on an empty store, JSON shape, remote client error mapping, bundle pull |
 | `src/Boors.Node` | Minimal-API host of `IMarketApi` (+ GetJobs, ExportBundle, Pull), problem details, response compression, health checks, optional operator token |
 | `src/Boors.Desktop` | WinUI 3 app (MVVM, DI, x:Bind), unpackaged + self-contained Windows App SDK, x64 |
 | `rules/rules.yaml` | Dated market rules (embedded into Boors.Market) |
@@ -51,8 +51,8 @@ the .NET SDK).
 dotnet build winui/Boors.WinUI.slnx -c Release
 
 # Tests (offline, Microsoft.Testing.Platform)
-cd winui/src/Boors.Market.Tests; dotnet test -c Release            # 115 tests
-cd winui/src/Boors.Market.Services.Tests; dotnet test -c Release   # 12 tests
+cd winui/src/Boors.Market.Tests; dotnet test -c Release            # 117 tests
+cd winui/src/Boors.Market.Services.Tests; dotnet test -c Release   # 26 tests
 
 # CLI against a data folder (copy, never move, a .boors-data folder into winui/.boors-data — it is git-ignored)
 dotnet run --project winui/src/Boors.Market.Cli -c Release -- --data winui/.boors-data health
@@ -71,15 +71,34 @@ DuckDB allows one process per store file: close the desktop before pointing the 
 
 - **Data:** local mode opens `%LOCALAPPDATA%\Boors\data\market.duckdb` (raw cache next to it); `BOORS_DATA`,
   `--data <dir>` or Settings → *Local store* override it (a restart applies a new folder). An empty store shows an
-  empty state with *Sync from node*. Remote mode (Settings → *Data source*) reads a Boors.Node over HTTP instead.
-- **Operations:** *Data health* runs any collection job through the in-process single-writer queue (live progress,
-  cancel) and *Sync from node* pulls another node's raw-cache bundle, imports it and replays it into the store.
-  Settings → *Run the collection schedule* enables the Iran-time schedule in the app (off by default: the desktop is a replica).
+  empty state: the download in progress, or *Sync from node* when background download is off. Remote mode (Settings → *Data source*) reads a Boors.Node over HTTP instead.
+- **Operations:** *Data health* shows dataset freshness, the last runs and source reachability, and *Sync from node*
+  pulls another node's raw-cache bundle, imports it and replays it into the store.
+- **Data collection** (the job monitor; `--page jobs`): the running job live (progress line, elapsed time, HTTP
+  requests, failed requests, retries, warnings, cancel), the queue (cancel one or every waiting job), and a period
+  filter (24 hours, 7, 30, 90 days) over KPI tiles (runs, success rate, failing jobs, items, requests, next scheduled
+  job), runs per day (or hour) stacked by outcome, the run time of one job, a table of every job (last run, next run,
+  schedule in words, runs, success rate, failures in a row, average and longest time, the last 20 outcomes, last
+  problem; *Run now*), the run history (job, outcome and text filters, CSV export) and the HTTP traffic per host
+  (requests, failures, error rate, average, p95 and slowest latency, last status and error). Opening a run or a queue
+  entry shows its fields and log: a queue entry keeps the lines its collectors, source clients and retry policy wrote
+  while it ran (the newest 1,000, following a running job live); an older run of this app is read back from the log
+  files; runs made by a node or the CLI have no log here. The menu item shows how many jobs failed since the page was
+  last open. A run left "running" by a process that died is shown as interrupted. Outcomes always carry an icon and a
+  word (✓ OK, ↷ skipped, ⚠ partial, ✕ failed, ⊘ cancelled, ⚡ interrupted). Remote mode shows the node's jobs (polled
+  every 3 s while the page is open).
+- **Background download** (on by default, Local mode; Settings → *Download market data automatically in the
+  background*, applied without a restart): the app runs the Iran-time schedule below while it is open and, when it
+  starts or the machine wakes, queues once every job whose scheduled time passed since it last ran — index history,
+  missed sessions, end of day, instruments, backfill, then the rest. A new store shows the market after the first jobs
+  and keeps backfilling 400 instruments per run until the history is complete. The title bar shows the running job;
+  the open page reloads when a job brings new prices or series. The setting is `AutoDownload` in `settings.json`; the
+  old opt-in `Collect` key is ignored, so existing installs switch on.
 - **Keyboard:** Ctrl+K command palette (symbols and commands: navigation, theme, language, digits, colours, density,
   run jobs, sync), Ctrl+F symbol search in the title bar, F5 reload, Enter in the filter box applies it.
 - **Command line** (session overrides, not saved): `--lang fa|en`, `--theme dark|light|system`,
   `--digits persian|latin`, `--preset iranian|cb`, `--density pro|lite`, `--mode local|remote`, `--node-url <url>`,
-  `--page overview|watch|screens|health|settings|symbol:<insCode>`, `--data <dir>`, `--size WxH`, `--scroll Y`,
+  `--page overview|watch|screens|health|jobs|settings|symbol:<insCode>`, `--data <dir>`, `--size WxH`, `--scroll Y`,
   `--exit-after-ms N` (closes N ms after the first page shows data; for startup measurements).
 - **Files:** settings `%LOCALAPPDATA%\Boors\settings.json`; structured logs (CLEF JSON lines)
   `%LOCALAPPDATA%\Boors\logs\desktop-yyyyMMdd.jsonl`; startup timings `...\logs\startup.txt`.
@@ -110,8 +129,11 @@ dotnet publish winui/src/Boors.Desktop -c Release -o publish/desktop-sc -p:SelfC
 | `GET api/v1/Market/GetIndexHistory/{insCode}?from=` · `GetMacroHistory/{series}?from=` · `Search?text=&take=` | |
 | `POST api/v1/Market/GetMarketWatch` | `{date, filter, classes, tradedOnly}`; a filter syntax error is a 400 problem |
 | `GET api/v1/Instrument/{GetMetrics,GetBars,GetFlows,GetEvents,GetShareholders,GetLetters,GetMessages}/{insCode}` | 404 problem for an unknown instrument |
-| `GET api/v1/MarketData/GetHealth` · `GetJobs` | health report; job queue + schedule (with next run times) |
+| `GET api/v1/MarketData/GetHealth` · `GetJobs` | health report; job queue + schedule (with next run times) + HTTP traffic per host since start |
+| `GET api/v1/MarketData/GetJob/{id}` | a queue entry with its log and traffic; 404 when the queue no longer holds it |
+| `GET api/v1/MarketData/GetRuns?job=&since=&take=` | run history (`collection_run`), newest first; default the last 30 days, 5,000 rows |
 | `POST api/v1/MarketData/RunJob/{job}` | **operator token**; returns the job id as text (like the boilerplate's `string` action) |
+| `POST api/v1/MarketData/CancelJob/{id}` | **operator token**; `true`, or `false` when the job already finished |
 | `GET api/v1/Sync/ExportBundle?since=` | **operator token**; zip of raw-cache entries fetched on/after `since` |
 | `POST api/v1/Sync/Pull` | **operator token**; `{nodeUrl, since, operatorToken}` → queued: download bundle, import (union), replay into the store |
 | `GET /health` · `/alive` | health checks (market data: degraded when stale on a collecting node) |
@@ -121,9 +143,20 @@ boilerplate DTOs (the DTO records are copied verbatim). Errors are RFC 9457 prob
 Brotli/Gzip compressed. `BOORS_OPERATOR_TOKEN` (or `Node:OperatorToken`) makes RunJob and Sync require
 `Authorization: Bearer <token>`; empty = open. `MarketData:Collect=true` schedules the jobs (Asia/Tehran):
 instruments 07:30 daily; end of day 13:35 and 18:35 (ETFs) Sat–Wed; supervisor messages every 30 min 08–18 Sat–Wed;
-Codal every 15 min 07–23; dollar/gold 09/13/17/21; funds 20:00; indices 01:15; backfill 02:00; halts 03:00 —
-exactly the boilerplate's Hangfire schedule. All writes go through one queue (DuckDB has a single writer); a job
-that is already waiting is not queued twice.
+Codal every 15 min 07–23; dollar/gold 09/13/17/21; funds 20:00; indices 01:15; backfill 02:00; halts 03:00 — the
+boilerplate's Hangfire schedule — plus missed sessions (`repair`) 01:30. All writes go through one queue (DuckDB has
+a single writer); a job that is already waiting is not queued twice.
+
+Catch-up: an entry is due when its latest scheduled time is later than the start of its job's last run in
+`collection_run` (a run cancelled or left "running" by a crash does not count; a job the user cancelled waits for its
+next time). The scheduler checks at least once a minute, so jobs missed while the process was down or the machine
+slept run once when it is back, in catch-up order. Backfill is queued again while its last run hit
+`MaxBackfillPerRun`. `repair` fills trading days of the last 30 days on which no instrument has a bar (the end-of-day
+job never ran) with one `ClosingPrice/GetInstrmentsHistoryInDay/{yyyyMMdd}` call per day (~2,200 traded
+instruments, ~170 KB), oldest first, stopping at the first day it cannot fetch; the bars are tagged `marketwatch`
+like end-of-day rows, corporate actions are detected as in end of day, and same-day flows stay missing on those days
+(no per-day bulk source). It also rewrites the latest stored session from the same list (one call, cached
+afterwards), because a 13:35 end-of-day snapshot holds intraday ETF prices when the 18:35 run was missed.
 
 ## Data compatibility
 
@@ -180,7 +213,8 @@ latest stable (2.x supports Windows 10 1809+); Mica is used on Windows 11 and a 
 
 ## Verification (2026-10-19, on the 2026-10-17 capture copied to `winui/.boors-data`)
 
-- `dotnet build winui/Boors.WinUI.slnx -c Release`: 7 projects, 0 warnings, 0 errors. Tests: 115 + 12 passed, offline.
+- `dotnet build winui/Boors.WinUI.slnx -c Release`: 7 projects, 0 warnings, 0 errors. Tests: 117 + 26 passed, offline
+  (counts as of the job monitor, 2026-10-27).
 - CLI `health` and `market overview`: identical output to the boilerplate CLI (TEDPIX 8,265,157 −1.91%, 146 up / 604 down,
   71 buy queues 2.19 hemat, individual net −6.82 hemat).
 - Node: every route exercised with curl (200/204/400/401/404 as designed; 3,023 market-watch rows; Brotli 1.7 MB → 0.6 MB);

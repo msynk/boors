@@ -29,6 +29,25 @@ public sealed class TsetmcParserTests
     }
 
     [TestMethod]
+    public void InstrumentsHistoryInDay_dates_every_row_with_the_requested_day()
+    {
+        var day = new DateOnly(2026, 10, 21);
+        var bars = TsetmcParser.ParseInstrumentsHistoryInDay(Golden.Read("tsetmc/instruments-history-in-day-sample.json"), day);
+
+        Assert.HasCount(4, bars);
+        Assert.IsTrue(bars.All(b => b.Date == day && b.InsCode > 0 && b.LastTradeTime is null));
+        var folad = bars.Single(b => b.InsCode == Golden.FooladInsCode);
+        Assert.AreEqual(4340m, folad.Open);
+        Assert.AreEqual(4210m, folad.Low);
+        Assert.AreEqual(4220m, folad.Close);
+        Assert.AreEqual(4230m, folad.Last);
+        Assert.AreEqual(4340m, folad.Yesterday);
+        Assert.AreEqual(48279L, folad.TradeCount);
+        Assert.AreEqual(4864252101L, folad.Volume);
+        Assert.AreEqual(20519267355350m, folad.Value);
+    }
+
+    [TestMethod]
     public void DailyHistory_contains_flat_zero_trade_rows_during_the_2026_closure()
     {
         var bars = TsetmcParser.ParseDailyHistory(Golden.Read("tsetmc/closing-price-daily-folad.json"), Golden.FooladInsCode);

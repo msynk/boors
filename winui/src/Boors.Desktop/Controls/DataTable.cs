@@ -4,6 +4,8 @@ using Microsoft.UI.Composition;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Hosting;
@@ -592,6 +594,26 @@ public sealed partial class DataTable : UserControl
         {
             if (item is not null)
                 owner.Invoke(item);
+        }
+
+        protected override AutomationPeer OnCreateAutomationPeer() => new RowAutomationPeer(this);
+
+        /// <summary>A row is a data item named by its first cell; invoking it does what a tap does.</summary>
+        private sealed partial class RowAutomationPeer(TableRow row) : FrameworkElementAutomationPeer(row), IInvokeProvider
+        {
+            protected override AutomationControlType GetAutomationControlTypeCore() =>
+                row.isHeader ? AutomationControlType.Header : AutomationControlType.DataItem;
+
+            protected override string GetNameCore() => row.texts.Length > 0 ? Plain(row.texts[0].Text) : string.Empty;
+
+            protected override object? GetPatternCore(PatternInterface patternInterface) =>
+                patternInterface == PatternInterface.Invoke && !row.isHeader ? this : base.GetPatternCore(patternInterface);
+
+            public void Invoke()
+            {
+                if (row.item is not null)
+                    row.owner.Invoke(row.item);
+            }
         }
 
         protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)

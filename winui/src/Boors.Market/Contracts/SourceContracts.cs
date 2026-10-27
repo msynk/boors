@@ -45,6 +45,7 @@ public sealed class SourceContracts(TsetmcClient tsetmc, CodalClient codal, Tgju
             ("tsetmc.instrument-search", tsetmc, e.InstrumentSearch("فولاد")),
             ("tsetmc.closing-price-info", tsetmc, e.ClosingPriceInfo(Folad)),
             ("tsetmc.closing-price-daily", tsetmc, e.ClosingPriceDailyList(Folad, 10)),
+            ("tsetmc.instruments-history-in-day", tsetmc, e.InstrumentsHistoryInDay(new DateOnly(2026, 10, 21))),
             ("tsetmc.client-type-history", tsetmc, e.ClientTypeHistory(Folad)),
             ("tsetmc.client-type-all", tsetmc, e.ClientTypeAll()),
             ("tsetmc.price-adjust", tsetmc, e.PriceAdjustList(Folad)),

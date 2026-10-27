@@ -11,7 +11,8 @@ public static class MarketServicesExtensions
 {
     /// <summary>
     /// The in-process API: Boors.Market (store, collectors, sources), <see cref="LocalMarketApi"/>, the single-writer job
-    /// queue and its worker, the Iran-time scheduler (idle unless MarketData:Collect) and node sync.
+    /// queue and its worker, the Iran-time scheduler (idle unless MarketData:Collect), node sync, and the job monitoring
+    /// feeds (each job's log lines, HTTP traffic per host).
     /// </summary>
     public static IServiceCollection AddBoorsLocalApi(this IServiceCollection services, Action<MarketDataOptions>? configureData = null, Action<MarketApiOptions>? configureApi = null)
     {
@@ -24,6 +25,8 @@ public static class MarketServicesExtensions
         services.TryAddSingleton<MarketJobScheduler>();
         services.AddHostedService<MarketJobWorker>();
         services.AddHostedService(sp => sp.GetRequiredService<MarketJobScheduler>());
+        services.TryAddSingleton<SourceTraffic>();
+        services.AddHostedService(sp => sp.GetRequiredService<SourceTraffic>());
         services.TryAddTransient<NodeSync>();
         services.AddHttpClient(NodeSync.HttpClientName, client =>
         {
@@ -34,11 +37,13 @@ public static class MarketServicesExtensions
         services.TryAddSingleton<LocalMarketApi>();
         services.TryAddSingleton<IMarketApi>(sp => sp.GetRequiredService<LocalMarketApi>());
 
-        // Job progress comes from the collectors' own Information-level log lines, whatever the global log level is.
+        // Job progress and logs come from the collectors' own log lines (Information and up) and the retry policy's
+        // events (Warning and up), whatever the global log level is.
         services.AddSingleton<ILoggerProvider, JobProgressLoggerProvider>();
         services.Configure<LoggerFilterOptions>(o =>
         {
             o.Rules.Add(new LoggerFilterRule(typeof(JobProgressLoggerProvider).FullName, "Boors.Market", LogLevel.Information, null));
+            o.Rules.Add(new LoggerFilterRule(typeof(JobProgressLoggerProvider).FullName, "Polly", LogLevel.Warning, null));
         });
         return services;
     }

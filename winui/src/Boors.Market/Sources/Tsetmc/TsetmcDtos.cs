@@ -10,6 +10,9 @@ internal sealed record ClosingPriceDailyEnvelope(List<ClosingPriceDto>? ClosingP
 
 internal sealed record ClosingPriceInfoEnvelope(ClosingPriceDto? ClosingPriceInfo);
 
+// Rows also carry instrumentID, lVal18AFC and lVal30 (ISIN, symbol, name); the instrument master comes from elsewhere.
+internal sealed record InstrumentsHistoryInDayEnvelope(List<ClosingPriceDto>? ClosingPriceDailyHistoryWithInstDetails);
+
 internal sealed record ClosingPriceDto
 {
     public decimal PriceChange { get; init; }
@@ -327,6 +330,7 @@ internal sealed record ShareholderDto
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ClosingPriceDailyEnvelope))]
+[JsonSerializable(typeof(InstrumentsHistoryInDayEnvelope))]
 [JsonSerializable(typeof(ClosingPriceInfoEnvelope))]
 [JsonSerializable(typeof(ClientTypeHistoryEnvelope))]
 [JsonSerializable(typeof(PriceAdjustEnvelope))]

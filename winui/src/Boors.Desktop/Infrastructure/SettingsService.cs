@@ -65,7 +65,9 @@ public sealed class SettingsService
             what |= SettingsChange.Density;
         if (before.Mode != Current.Mode || before.NodeUrl != Current.NodeUrl || before.OperatorToken != Current.OperatorToken || before.Offline != Current.Offline)
             what |= SettingsChange.DataSource;
-        if (before.DataRoot != Current.DataRoot || before.NodeName != Current.NodeName || before.Collect != Current.Collect)
+        if (before.DownloadsInBackground != Current.DownloadsInBackground)
+            what |= SettingsChange.Collection;
+        if (before.DataRoot != Current.DataRoot || before.NodeName != Current.NodeName)
             what |= SettingsChange.RestartRequired;
 
         if (what != SettingsChange.None)
@@ -156,6 +158,7 @@ public enum SettingsChange
     Density = 4,
     DataSource = 8,
     RestartRequired = 16,
+    Collection = 32,
 }
 
 /// <summary>Parsed command line: <c>--name value</c> pairs (e.g. --lang en --theme light --page watch).</summary>

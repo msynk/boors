@@ -78,6 +78,19 @@ public sealed class RemoteMarketApi(HttpClient http, RemoteMarketApiOptions opti
     public async Task<JobQueueDto> GetJobsAsync(CancellationToken cancellationToken) =>
         (await GetAsync("api/v1/MarketData/GetJobs", Json.JobQueueDto, cancellationToken))!;
 
+    public async Task<JobDetailDto> GetJobAsync(string id, CancellationToken cancellationToken) =>
+        (await GetAsync($"api/v1/MarketData/GetJob/{Uri.EscapeDataString(id)}", Json.JobDetailDto, cancellationToken))!;
+
+    public async Task<bool> CancelJobAsync(string id, CancellationToken cancellationToken)
+    {
+        using var request = Operator(new HttpRequestMessage(HttpMethod.Post, $"api/v1/MarketData/CancelJob/{Uri.EscapeDataString(id)}"));
+        using var response = await http.SendAsync(request, cancellationToken);
+        return await ReadAsync(response, Json.Boolean, cancellationToken);
+    }
+
+    public Task<List<JobRunDto>> GetRunsAsync(string? job, string? since, int take, CancellationToken cancellationToken) =>
+        GetListAsync($"api/v1/MarketData/GetRuns{Query(("job", job), ("since", since), ("take", Int(take)))}", Json.ListJobRunDto, cancellationToken);
+
     public async Task<string> PullFromNodeAsync(SyncPullRequestDto request, CancellationToken cancellationToken)
     {
         using var message = Operator(new HttpRequestMessage(HttpMethod.Post, "api/v1/Sync/Pull") { Content = JsonContent.Create(request, Json.SyncPullRequestDto) });

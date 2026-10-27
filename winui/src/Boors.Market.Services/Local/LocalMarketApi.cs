@@ -218,7 +218,24 @@ public sealed class LocalMarketApi(
             MarketJobs.Names,
             services.GetService<MarketJobScheduler>()?.Enabled ?? false,
             services.GetService<MarketJobScheduler>()?.Describe() ?? [],
-            jobs.Snapshot()));
+            jobs.Snapshot(),
+            services.GetService<SourceTraffic>()?.Snapshot() ?? [],
+            services.GetService<SourceTraffic>()?.StartedAt));
+
+    public Task<JobDetailDto> GetJobAsync(string id, CancellationToken cancellationToken) =>
+        Task.FromResult(jobs.Detail(id) ?? throw MarketApiException.NotFound($"Job '{id}' is not in the queue (it keeps the last {MarketJobQueue.HistoryLimit} finished jobs)."));
+
+    public Task<bool> CancelJobAsync(string id, CancellationToken cancellationToken) => Task.FromResult(jobs.Cancel(id));
+
+    public Task<List<JobRunDto>> GetRunsAsync(string? job, string? since, int take, CancellationToken cancellationToken)
+    {
+        var from = ParseDate(since) ?? DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime).AddDays(-30);
+        var limit = Math.Clamp(take == 0 ? 5000 : take, 1, 50_000);
+        var start = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        return Run(() => Store.GetRuns(start, string.IsNullOrWhiteSpace(job) ? null : job, limit)
+            .Select(r => new JobRunDto(r.RunId, r.Job, r.Node, r.StartedAt, r.FinishedAt, r.Status, r.Items, r.Failures, r.Message))
+            .ToList(), cancellationToken);
+    }
 
     public Task<string> PullFromNodeAsync(SyncPullRequestDto request, CancellationToken cancellationToken)
     {

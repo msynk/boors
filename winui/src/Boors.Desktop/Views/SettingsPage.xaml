@@ -58,9 +58,13 @@
                         <TextBlock x:Name="DataRootNote" Style="{StaticResource MutedTextStyle}" />
                     </StackPanel>
                     <TextBox x:Name="NodeNameBox" Header="{l:L K='Node name recorded on raw responses fetched here'}" FlowDirection="LeftToRight" MinWidth="320" HorizontalAlignment="Left" LostFocus="OnNodeName" />
-                    <ToggleSwitch x:Name="CollectSwitch" OnContent="{l:L K='On'}" OffContent="{l:L K='Off'}" Header="{l:L K='Run the collection schedule in this app (Iran time)'}" Toggled="OnCollect" />
+                    <StackPanel Spacing="4">
+                        <ToggleSwitch x:Name="AutoDownloadSwitch" OnContent="{l:L K='On'}" OffContent="{l:L K='Off'}" Header="{l:L K='Download market data automatically in the background'}" Toggled="OnAutoDownload" />
+                        <TextBlock Style="{StaticResource MutedTextStyle}" TextWrapping="WrapWholeWords"
+                                   Text="{l:L K='While the app is open it follows the Iran-time collection schedule, and when it starts it catches up on what was missed while it was closed. Only when the data source is this computer.'}" />
+                    </StackPanel>
                     <InfoBar Severity="Warning" IsClosable="False" IsOpen="{x:Bind ViewModel.RestartPending, Mode=OneWay}"
-                             Title="{l:L K='Restart to apply'}" Message="{l:L K='The data folder, node name and schedule take effect after a restart.'}">
+                             Title="{l:L K='Restart to apply'}" Message="{l:L K='The data folder and node name take effect after a restart.'}">
                         <InfoBar.ActionButton>
                             <Button Content="{l:L K='Restart now'}" Click="OnRestart" />
                         </InfoBar.ActionButton>

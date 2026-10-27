@@ -11,6 +11,7 @@ public sealed class Navigator
     public const string Watch = "watch";
     public const string Screens = "screens";
     public const string Health = "health";
+    public const string Jobs = "jobs";
     public const string Settings = "settings";
     public const string Symbol = "symbol";
 
@@ -65,6 +66,7 @@ public sealed class Navigator
         Watch => typeof(MarketWatchPage),
         Screens => typeof(ScreensPage),
         Health => typeof(HealthPage),
+        Jobs => typeof(JobsPage),
         Settings => typeof(SettingsPage),
         Symbol => typeof(SymbolPage),
         _ => typeof(OverviewPage),
@@ -75,6 +77,7 @@ public sealed class Navigator
         nameof(MarketWatchPage) => Watch,
         nameof(ScreensPage) => Screens,
         nameof(HealthPage) => Health,
+        nameof(JobsPage) => Jobs,
         nameof(SettingsPage) => Settings,
         nameof(SymbolPage) => Symbol,
         _ => Overview,

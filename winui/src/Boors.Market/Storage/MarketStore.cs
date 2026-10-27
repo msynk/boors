@@ -149,7 +149,7 @@ public sealed class MarketStore : IDisposable
             onConflict: """
                 DO UPDATE SET open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low, close = EXCLUDED.close, last = EXCLUDED.last,
                     yesterday = EXCLUDED.yesterday, trade_count = EXCLUDED.trade_count, volume = EXCLUDED.volume, value = EXCLUDED.value,
-                    h_even = EXCLUDED.h_even, day_status = EXCLUDED.day_status, halt_reason = COALESCE(EXCLUDED.halt_reason, daily_bar.halt_reason),
+                    h_even = COALESCE(EXCLUDED.h_even, daily_bar.h_even), day_status = EXCLUDED.day_status, halt_reason = COALESCE(EXCLUDED.halt_reason, daily_bar.halt_reason),
                     source = EXCLUDED.source
                 WHERE NOT (EXCLUDED.source = 'marketwatch' AND daily_bar.source = 'history')
                 """);
@@ -200,6 +200,16 @@ public sealed class MarketStore : IDisposable
                 [("n", count)], ReadBar)
             .GroupBy(b => b.Bar.InsCode)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<StoredBar>)g.ToList());
+
+    /// <summary>Every stored bar dated <paramref name="from"/>..<paramref name="to"/>, per instrument in date order.</summary>
+    public IReadOnlyDictionary<long, IReadOnlyList<StoredBar>> GetBarsBetween(DateOnly from, DateOnly to) =>
+        Query("SELECT * FROM daily_bar WHERE d BETWEEN $from AND $to ORDER BY ins_code, d", [("from", from), ("to", to)], ReadBar)
+            .GroupBy(b => b.Bar.InsCode)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<StoredBar>)g.ToList());
+
+    /// <summary>The dates in <paramref name="from"/>..<paramref name="to"/> on which at least one instrument has a bar.</summary>
+    public IReadOnlySet<DateOnly> GetBarDates(DateOnly from, DateOnly to) =>
+        Query("SELECT DISTINCT d FROM daily_bar WHERE d BETWEEN $from AND $to", [("from", from), ("to", to)], r => r.GetFieldValue<DateOnly>(0)).ToHashSet();
 
     public IReadOnlyDictionary<long, DateOnly> GetLatestBarDates() =>
         Query("SELECT ins_code, max(d) FROM daily_bar GROUP BY ins_code", [], r => (r.GetInt64(0), r.GetFieldValue<DateOnly>(1)))
@@ -474,12 +484,19 @@ public sealed class MarketStore : IDisposable
     public IReadOnlyList<CollectionRun> GetLatestRuns() =>
         Query("""
             SELECT * FROM collection_run QUALIFY row_number() OVER (PARTITION BY job ORDER BY started_at DESC) = 1 ORDER BY job
-            """, [], r => new CollectionRun(
-                r.GetString("run_id"), r.GetString("job"), r.GetString("node"),
-                r.GetFieldValue<DateTimeOffset>(r.GetOrdinal("started_at")),
-                r.IsDBNull(r.GetOrdinal("finished_at")) ? null : r.GetFieldValue<DateTimeOffset>(r.GetOrdinal("finished_at")),
-                r.GetString("status"), r.GetInt32("items"), r.GetInt32("failures"),
-                r.IsDBNull(r.GetOrdinal("message")) ? null : r.GetString("message")));
+            """, [], ReadRun);
+
+    /// <summary>Runs started at or after <paramref name="since"/>, newest first, optionally of one job.</summary>
+    public IReadOnlyList<CollectionRun> GetRuns(DateTimeOffset since, string? job, int limit) =>
+        Query($"SELECT * FROM collection_run WHERE started_at >= $since{(job is null ? string.Empty : " AND job = $job")} ORDER BY started_at DESC LIMIT $limit",
+            job is null ? [("since", since), ("limit", limit)] : [("since", since), ("job", job), ("limit", limit)], ReadRun);
+
+    private static CollectionRun ReadRun(DuckDBDataReader r) => new(
+        r.GetString("run_id"), r.GetString("job"), r.GetString("node"),
+        r.GetFieldValue<DateTimeOffset>(r.GetOrdinal("started_at")),
+        r.IsDBNull(r.GetOrdinal("finished_at")) ? null : r.GetFieldValue<DateTimeOffset>(r.GetOrdinal("finished_at")),
+        r.GetString("status"), r.GetInt32("items"), r.GetInt32("failures"),
+        r.IsDBNull(r.GetOrdinal("message")) ? null : r.GetString("message"));
 
     public IReadOnlyList<DatasetFreshness> GetFreshness() =>
         Query("""

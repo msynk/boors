@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Boors.Market.Ingestion;
 
-// Prices: one-time history backfill, the nightly end-of-day append, and halt resolution.
+// Prices: one-time history backfill, the nightly end-of-day append, missed-session repair, and halt resolution.
 public sealed partial class MarketCollector
 {
     /// <summary>
@@ -113,28 +113,16 @@ public sealed partial class MarketCollector
 
                 var history = recent.GetValueOrDefault(row.InsCode)?.Where(b => b.Bar.Date < sessionDate).Select(b => b.Bar).ToList() ?? [];
                 var instrumentClass = instruments.TryGetValue(row.InsCode, out var instrument) ? instrument.Class : row.Class;
-                var classifier = new DayStatusClassifier(calendar, d => rules.GetPriceLimit(instrumentClass, d).Value);
-                newBars.Add(classifier.Classify([.. history, bar])[^1]);
-
-                if (history.Count > 0 && history[^1].Close > 0 && bar.TradeCount > 0 && bar.Yesterday > 0
-                    && Math.Abs(bar.Yesterday / history[^1].Close - 1) > 0.0005m)
-                {
-                    corporateActions.Add(new PriceAdjustment { InsCode = row.InsCode, Date = sessionDate.Value, AdjustedClose = bar.Yesterday, UnadjustedClose = history[^1].Close });
-                }
+                var (classified, corporateAction) = ClassifySessionBar(bar, history, instrumentClass, calendar);
+                newBars.Add(classified);
+                if (corporateAction is not null)
+                    corporateActions.Add(corporateAction);
             }
 
             store.UpsertDailyBars(newBars, "marketwatch");
             store.UpdateSessionSnapshots(snapshot.Rows.Select(r => SessionSnapshot.From(r, sessionDate.Value)));
             store.UpsertPriceAdjustments(corporateActions, "implied");
-
-            foreach (var action in corporateActions.Where(a => instruments.TryGetValue(a.InsCode, out var i) && CollectionScope.Default.Contains(i.Class)))
-            {
-                failures += await TryAsync($"corporate action {action.InsCode}", async () =>
-                {
-                    store.UpsertPriceAdjustments(await tsetmc.GetPriceAdjustmentsAsync(action.InsCode, policy, cancellationToken), "published");
-                    store.UpsertShareChanges(await tsetmc.GetShareChangesAsync(action.InsCode, policy, cancellationToken));
-                });
-            }
+            failures += await FetchCorporateActionsAsync(corporateActions, instruments, policy, cancellationToken);
 
             // Same-day flows: volumes and counts are official, rial values are estimated from the day's average price.
             failures += await TryAsync("client types", async () =>
@@ -164,6 +152,130 @@ public sealed partial class MarketCollector
             return (newBars.Count, failures,
                 $"session {sessionDate:yyyy-MM-dd}: {newBars.Count(b => b.Bar.TradeCount > 0)} traded, {corporateActions.Count} corporate actions, {pendingBackfill} new instruments awaiting backfill");
         });
+
+    /// <summary>
+    /// Fills the trading days of the last <paramref name="lookbackDays"/> on which no instrument has a bar because the
+    /// end-of-day job never ran (the desktop was closed, the node was down): one GetInstrmentsHistoryInDay call per day,
+    /// oldest first, classified and checked for corporate actions like the end-of-day append. It stops at the first day
+    /// it cannot fetch, so a later day is never compared with a hole before it; the next run continues from there.
+    /// The latest stored session before today is rewritten from the same official list (one more call, cached after
+    /// the first run): its bars may be the 13:35 snapshot, taken before the ETFs closed at 18:00, and the next
+    /// end-of-day append compares against them. Same-day flows have no per-day bulk source, so flows stay missing on
+    /// repaired days.
+    /// </summary>
+    public Task<CollectionResult> RepairMissedSessionsAsync(int lookbackDays, CachePolicy policy, CancellationToken cancellationToken) =>
+        RunAsync("repair", async () =>
+        {
+            var instruments = store.GetInstruments().ToDictionary(i => i.InsCode);
+            if (instruments.Count == 0)
+                return (0, 0, "skipped: no instruments yet (end of day and backfill fill a new store)");
+
+            // Today's session belongs to the end-of-day job.
+            var today = TodayInIran;
+            var from = today.AddDays(-lookbackDays);
+            var to = today.AddDays(-1);
+            var closures = store.GetClosureDays().ToHashSet();
+            var withBars = store.GetBarDates(from, to);
+            var missed = EachDay(from, to).Where(d => !withBars.Contains(d) && DataHealthService.IsTradingDay(d, closures)).ToList();
+            DateOnly? latest = withBars.Count > 0 ? withBars.Max() : null;
+            var days = missed.Concat(latest is { } l ? [l] : []).Order().ToList();
+            if (days.Count == 0)
+                return (0, 0, "no missed sessions");
+
+            var calendar = LoadCalendar();
+            var history = store.GetBarsBetween(days[0].AddDays(-30), today)
+                .ToDictionary(kv => kv.Key, kv => kv.Value.Select(b => b.Bar).ToList());
+            var corporateActions = new List<PriceAdjustment>();
+            var filled = 0;
+            var stored = 0;
+            var failures = 0;
+            var refreshed = false;
+            foreach (var day in days)
+            {
+                IReadOnlyList<DailyBar>? traded = null;
+                failures += await TryAsync($"session {day:yyyy-MM-dd}", async () =>
+                    traded = await tsetmc.GetInstrumentsHistoryInDayAsync(day, Prefer(policy), cancellationToken));
+                // A missed day that cannot be fetched stops the run; the stored session just keeps its bars.
+                if (traded is null && day == latest)
+                    continue;
+                if (traded is null)
+                    break;
+
+                // Rows only for instruments that traded; an empty day was a closure the calendar does not know.
+                var newBars = new List<ClassifiedBar>();
+                foreach (var bar in traded)
+                {
+                    if (!instruments.TryGetValue(bar.InsCode, out var instrument))
+                        continue;
+
+                    if (!history.TryGetValue(bar.InsCode, out var bars))
+                        history[bar.InsCode] = bars = [];
+                    var (classified, corporateAction) = ClassifySessionBar(bar, [.. bars.Where(b => b.Date < day).OrderBy(b => b.Date)], instrument.Class, calendar);
+                    newBars.Add(classified);
+                    bars.Add(bar);
+
+                    // The end-of-day append already checked the stored session for corporate actions; secondary
+                    // listings (issuance/redemption units at price 1, blocks) roll their reference price every day.
+                    if (corporateAction is not null && day != latest && instrument.ParentInsCode is null)
+                        corporateActions.Add(corporateAction);
+                }
+
+                // Tagged like the end-of-day rows: a bulk end-of-day source that a per-instrument backfill replaces.
+                store.UpsertDailyBars(newBars, "marketwatch");
+                stored += newBars.Count;
+                if (day == latest)
+                {
+                    refreshed = true;
+                }
+                else
+                {
+                    filled++;
+                    logger.LogInformation("Repair: {Day:yyyy-MM-dd} filled with {Bars} bars ({Filled}/{Missed})", day, newBars.Count, filled, missed.Count);
+                }
+            }
+
+            store.UpsertPriceAdjustments(corporateActions, "implied");
+            failures += await FetchCorporateActionsAsync(corporateActions, instruments, policy, cancellationToken);
+            var refresh = refreshed ? $"; {latest:yyyy-MM-dd} rewritten from the official list" : string.Empty;
+            return (stored, failures, missed.Count == 0
+                ? $"no missed sessions{refresh}"
+                : $"{filled} of {missed.Count} missed sessions filled ({missed[0]:yyyy-MM-dd}..{missed[^1]:yyyy-MM-dd}), {stored} bars, {corporateActions.Count} corporate actions{refresh}");
+        });
+
+    /// <summary>
+    /// Classifies a session's bar against the instrument's stored days before it, and spots a corporate action: the
+    /// session's reference price differs from the last stored close.
+    /// </summary>
+    private (ClassifiedBar Bar, PriceAdjustment? CorporateAction) ClassifySessionBar(DailyBar bar, IReadOnlyList<DailyBar> history, InstrumentClass instrumentClass, MarketCalendar calendar)
+    {
+        var classifier = new DayStatusClassifier(calendar, d => rules.GetPriceLimit(instrumentClass, d).Value);
+        var classified = classifier.Classify([.. history, bar])[^1];
+        var corporateAction = history.Count > 0 && history[^1].Close > 0 && bar.TradeCount > 0 && bar.Yesterday > 0
+            && Math.Abs(bar.Yesterday / history[^1].Close - 1) > 0.0005m
+            ? new PriceAdjustment { InsCode = bar.InsCode, Date = bar.Date, AdjustedClose = bar.Yesterday, UnadjustedClose = history[^1].Close }
+            : null;
+        return (classified, corporateAction);
+    }
+
+    /// <summary>
+    /// Published adjustments and share changes of the primary default-scope listings that had a corporate action
+    /// (secondary listings roll their reference price daily, so they always look like one).
+    /// </summary>
+    private async Task<int> FetchCorporateActionsAsync(IReadOnlyList<PriceAdjustment> corporateActions, IReadOnlyDictionary<long, Instrument> instruments, CachePolicy policy, CancellationToken cancellationToken)
+    {
+        var failures = 0;
+        foreach (var insCode in corporateActions.Select(a => a.InsCode).Distinct()
+            .Where(c => instruments.TryGetValue(c, out var i) && i.ParentInsCode is null && CollectionScope.Default.Contains(i.Class)))
+        {
+            failures += await TryAsync($"corporate action {insCode}", async () =>
+            {
+                store.UpsertPriceAdjustments(await tsetmc.GetPriceAdjustmentsAsync(insCode, policy, cancellationToken), "published");
+                store.UpsertShareChanges(await tsetmc.GetShareChangesAsync(insCode, policy, cancellationToken));
+            });
+        }
+
+        return failures;
+    }
 
     /// <summary>
     /// Resolves zero-trade runs: asks TSETMC for the instrument state on the first day of each unresolved run; a halted

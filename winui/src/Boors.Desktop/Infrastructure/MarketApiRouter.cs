@@ -78,5 +78,11 @@ public sealed class MarketApiRouter(IServiceProvider services, SettingsService s
 
     public Task<JobQueueDto> GetJobsAsync(CancellationToken cancellationToken) => Api.GetJobsAsync(cancellationToken);
 
+    public Task<JobDetailDto> GetJobAsync(string id, CancellationToken cancellationToken) => Api.GetJobAsync(id, cancellationToken);
+
+    public Task<bool> CancelJobAsync(string id, CancellationToken cancellationToken) => Api.CancelJobAsync(id, cancellationToken);
+
+    public Task<List<JobRunDto>> GetRunsAsync(string? job, string? since, int take, CancellationToken cancellationToken) => Api.GetRunsAsync(job, since, take, cancellationToken);
+
     public Task<string> PullFromNodeAsync(SyncPullRequestDto request, CancellationToken cancellationToken) => Api.PullFromNodeAsync(request, cancellationToken);
 }

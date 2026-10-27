@@ -37,7 +37,11 @@ public static class NodeEndpoints
         var marketData = app.MapGroup("api/v1/MarketData").WithTags("MarketData");
         marketData.MapGet("GetHealth", (IMarketApi api, CancellationToken ct) => api.GetHealthAsync(ct));
         marketData.MapGet("GetJobs", (IMarketApi api, CancellationToken ct) => api.GetJobsAsync(ct));
+        marketData.MapGet("GetJob/{id}", (string id, IMarketApi api, CancellationToken ct) => api.GetJobAsync(id, ct));
+        marketData.MapGet("GetRuns", (string? job, string? since, int? take, IMarketApi api, CancellationToken ct) => api.GetRunsAsync(job, since, take ?? 0, ct));
         marketData.MapPost("RunJob/{job}", (string job, IMarketApi api, CancellationToken ct) => api.RunJobAsync(job, ct))
+            .AddEndpointFilter<OperatorTokenFilter>();
+        marketData.MapPost("CancelJob/{id}", (string id, IMarketApi api, CancellationToken ct) => api.CancelJobAsync(id, ct))
             .AddEndpointFilter<OperatorTokenFilter>();
 
         var sync = app.MapGroup("api/v1/Sync").WithTags("Sync").AddEndpointFilter<OperatorTokenFilter>();

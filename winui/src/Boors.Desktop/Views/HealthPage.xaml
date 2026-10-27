@@ -38,44 +38,24 @@
             <InfoBar Severity="Informational" IsClosable="True"
                      IsOpen="{x:Bind l:Bools.HasText(ViewModel.Notice), Mode=OneWay}" Message="{x:Bind ViewModel.Notice, Mode=OneWay}" />
 
-            <!-- Jobs: buttons, the running job with live progress, recent entries -->
+            <!-- Data collection: a summary; the job monitor has the rest -->
             <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="12">
-                    <StackPanel>
-                        <TextBlock Text="{l:L K='Run a collection job'}" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                        <TextBlock x:Name="JobsHint" Style="{StaticResource MutedTextStyle}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{l:L K='Data collection'}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.CollectionText, Mode=OneWay}" Style="{StaticResource MutedTextStyle}" TextWrapping="WrapWholeWords" />
                     </StackPanel>
-                    <ItemsRepeater x:Name="JobButtons">
-                        <ItemsRepeater.Layout>
-                            <UniformGridLayout MinItemWidth="160" MinItemHeight="32" MinColumnSpacing="8" MinRowSpacing="8" ItemsStretch="Fill" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="vm:Choice">
-                                <Button Content="{x:Bind Text}" Tag="{x:Bind Key}" Click="OnRunJob" HorizontalAlignment="Stretch" ToolTipService.ToolTip="{x:Bind Key}" />
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-
-                    <Border x:Name="RunningCard" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="12,8" Visibility="Collapsed">
-                        <Grid ColumnSpacing="12" RowSpacing="6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <TextBlock x:Name="RunningTitle" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <Button x:Name="CancelButton" Grid.Column="1" Grid.RowSpan="2" Content="{l:L K='Cancel'}" Click="OnCancel" VerticalAlignment="Center" />
-                            <TextBlock x:Name="RunningProgress" Grid.Row="1" Style="{StaticResource MutedTextStyle}" FlowDirection="LeftToRight" HorizontalAlignment="Left" />
-                            <ProgressBar Grid.Row="2" Grid.ColumnSpan="2" IsIndeterminate="True" />
-                        </Grid>
-                    </Border>
-
-                    <controls:DataTable x:Name="JobsTable" Height="200" />
-                </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Center" Click="OnOpenJobs">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE81C;" FontSize="14" />
+                            <TextBlock Text="{l:L K='Open the job monitor'}" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
             </Border>
 
             <!-- Sync from another node: download its raw-cache bundle, import, reload the store -->

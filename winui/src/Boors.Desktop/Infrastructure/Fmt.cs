@@ -146,6 +146,28 @@ public static class Fmt
         ? Ltr(span.TotalSeconds.ToString("N1", numbers)) + " " + Loc.T("s")
         : Ltr(span.TotalMinutes.ToString("N1", numbers)) + " " + Loc.T("min");
 
+    public static string Duration(TimeSpan? span) => span is { } s ? Duration(s) : Dash;
+
+    /// <summary>Milliseconds, rounded: "340 ms".</summary>
+    public static string Milliseconds(double? ms) => ms is { } m ? Ltr(m.ToString("N0", numbers)) + " " + Loc.T("ms") : Dash;
+
+    /// <summary>A time relative to now in whole units: "12 min ago", "in 3 h", "2 days ago".</summary>
+    public static string Relative(DateTimeOffset? at, DateTimeOffset now)
+    {
+        if (at is not { } t)
+            return Dash;
+        var delta = t - now;
+        var span = delta.Duration();
+        var amount = span.TotalMinutes < 1 ? Loc.F("{0} s", Number((int)span.TotalSeconds))
+            : span.TotalHours < 1 ? Loc.F("{0} min", Number((int)span.TotalMinutes))
+            : span.TotalDays < 1 ? Loc.F("{0} h", Number((int)span.TotalHours))
+            : Loc.F("{0} days", Number((int)span.TotalDays));
+        return delta.Ticks > 0 ? Loc.F("in {0}", amount) : Loc.F("{0} ago", amount);
+    }
+
+    /// <summary>Clock time of a moment in local time: "13:35".</summary>
+    public static string Clock(DateTimeOffset? value) => value is { } v ? Ltr(v.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)) : Dash;
+
     public static Tone ToneOf(double? value) => value switch
     {
         > 0.005 => Tone.Up,

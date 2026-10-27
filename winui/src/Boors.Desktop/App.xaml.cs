@@ -11,7 +11,9 @@ namespace Boors.Desktop;
 /// <summary>
 /// Composition root. Startup overlaps its three slow parts: the UI thread creates the window while a pool thread
 /// builds the host (DI, logging) and immediately starts the first page's queries (which opens the DuckDB store); the
-/// shell is attached when both are ready, and the job worker and scheduler start in the background afterwards.
+/// shell is attached when both are ready, and the job worker and scheduler start in the background afterwards. The
+/// scheduler downloads market data in the background (Settings → background download, Local mode) and follows the
+/// setting without a restart.
 /// </summary>
 public partial class App : Application
 {
@@ -51,11 +53,17 @@ public partial class App : Application
         StartupClock.Mark("window-created");
         Host = hostTask.GetAwaiter().GetResult();
         settings.LogDeferred(Get<ILogger<SettingsService>>());
+        settings.Changed += (_, change) =>
+        {
+            if (change.HasFlag(SettingsChange.Collection))
+                Get<MarketJobScheduler>().Enabled = settings.Current.DownloadsInBackground;
+        };
         window.Initialize();
         window.Activate();
         StartupClock.Mark("window");
 
-        // Background services (job worker, scheduler) start off the UI thread.
+        // Background services (job worker, scheduler) start off the UI thread; the scheduler then catches up on the
+        // jobs missed while the app was closed.
         _ = Task.Run(() => Host.StartAsync());
     }
 
@@ -111,7 +119,7 @@ public partial class App : Application
         {
             options.DataRoot = settings.EffectiveDataRoot;
             options.Node = settings.EffectiveNode;
-            options.Collect = settings.Current.Collect;
+            options.Collect = settings.Current.DownloadsInBackground;
         });
         services.AddOptions<MarketApiOptions>().Configure<SettingsService>((options, settings) => options.Offline = settings.Current.Offline);
 
@@ -121,6 +129,7 @@ public partial class App : Application
         services.AddSingleton<SymbolViewModel>();
         services.AddSingleton<ScreensViewModel>();
         services.AddSingleton<HealthViewModel>();
+        services.AddSingleton<JobsViewModel>();
         services.AddSingleton<SettingsViewModel>();
         return builder.Build();
     }

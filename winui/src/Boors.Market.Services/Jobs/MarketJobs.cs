@@ -5,13 +5,19 @@ namespace Boors.Market.Services.Jobs;
 
 /// <summary>
 /// The collection jobs a node or the desktop can run by name, mapped onto <see cref="MarketCollector"/> exactly as the
-/// boilerplate's MarketDataJobRunner does, plus <c>reload</c>: replay the raw cache into the store (an in-place
-/// <c>boors rebuild</c>, used after importing another node's bundle).
+/// boilerplate's MarketDataJobRunner does, plus <c>repair</c>: fill sessions the end-of-day job missed, and
+/// <c>reload</c>: replay the raw cache into the store (an in-place <c>boors rebuild</c>, used after importing another
+/// node's bundle).
 /// </summary>
 public static class MarketJobs
 {
-    /// <summary>Jobs accepted by RunJob, in the boilerplate's order.</summary>
-    public static readonly IReadOnlyList<string> Names = ["instruments", "indices", "backfill", "eod", "funds", "macro", "codal", "messages", "halts", Reload];
+    /// <summary>Jobs accepted by RunJob, in the boilerplate's order (repair and reload are additions).</summary>
+    public static readonly IReadOnlyList<string> Names = ["instruments", "indices", "backfill", "eod", Repair, "funds", "macro", "codal", "messages", "halts", Reload];
+
+    public const string Repair = "repair";
+
+    /// <summary>How far back <c>repair</c> looks for sessions without any bar.</summary>
+    public const int RepairLookbackDays = 30;
 
     public const string Reload = "reload";
 
@@ -28,6 +34,7 @@ public static class MarketJobs
         "codal" => [await collector.SyncCodalAsync(maxPages: 3, CachePolicy.Network, cancellationToken)],
         "messages" => [await collector.SyncMessagesAsync(top: 200, CachePolicy.Network, cancellationToken)],
         "halts" => [await collector.ResolveHaltsAsync(options.MaxHaltQueriesPerRun, scope: null, CachePolicy.Network, cancellationToken)],
+        Repair => [await collector.RepairMissedSessionsAsync(RepairLookbackDays, CachePolicy.Network, cancellationToken)],
         Reload => await ReloadFromCacheAsync(collector, cancellationToken),
         _ => throw new ArgumentOutOfRangeException(nameof(job), job, $"Unknown market-data job. Jobs: {string.Join(", ", Names)}."),
     };
@@ -46,6 +53,7 @@ public static class MarketJobs
             await collector.SyncInstrumentsAsync(details: false, 0, cache, cancellationToken),
             await collector.BackfillHistoryAsync(int.MaxValue, force: true, withMessages: false, scope: null, cache, cancellationToken),
             await collector.EndOfDayAsync(force: true, cache, cancellationToken),
+            await collector.RepairMissedSessionsAsync(RepairLookbackDays, cache, cancellationToken),
             await collector.SyncMessagesAsync(200, cache, cancellationToken),
             await collector.ResolveHaltsAsync(500, scope: null, cache, cancellationToken),
             await collector.SyncCodalAsync(5, cache, cancellationToken),

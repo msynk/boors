@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Boors.Desktop.ViewModels;
 
 /// <summary>The home screen: KPI tiles, TEDPIX (rial or dollar-indexed), 60-session breadth, sector returns, movers.</summary>
-public sealed partial class OverviewViewModel(IMarketApi api, ILogger<OverviewViewModel> logger) : PageViewModel(api, logger)
+public sealed partial class OverviewViewModel(IMarketApi api, SettingsService settings, ILogger<OverviewViewModel> logger) : PageViewModel(api, logger)
 {
     public const long Tedpix = 32097828799138957;
     public const long EqualWeight = 67130298613737946;
@@ -58,6 +58,13 @@ public sealed partial class OverviewViewModel(IMarketApi api, ILogger<OverviewVi
     [ObservableProperty]
     public partial bool IsEmpty { get; set; }
 
+    /// <summary>The empty state: the background download is filling the store, or it is off and the user must act.</summary>
+    [ObservableProperty]
+    public partial string EmptyText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string EmptyAction { get; set; } = string.Empty;
+
     /// <summary>Raised when the index series changed (the chart redraws itself; ScottPlot has no bindings).</summary>
     public event EventHandler? IndexChanged;
 
@@ -84,6 +91,11 @@ public sealed partial class OverviewViewModel(IMarketApi api, ILogger<OverviewVi
         IsEmpty = data.Overview is null;
         if (data.Overview is null)
         {
+            var downloading = settings.Current.DownloadsInBackground;
+            EmptyText = downloading
+                ? Loc.T("Market data is downloading in the background. The first prices appear when the first jobs finish; the full price history takes longer. Data health shows the progress.")
+                : Loc.T("This computer has no market store yet. Pull the raw cache from a Boors node, or run the collection jobs (they call TSETMC, Codal and tgju directly).");
+            EmptyAction = Loc.T(downloading ? "Data health" : "Sync from node");
             Overview = null;
             HasData = false;
             return;

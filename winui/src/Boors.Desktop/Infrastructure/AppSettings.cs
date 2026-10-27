@@ -34,8 +34,11 @@ public sealed class AppSettings
     /// <summary>Never call a data source from a read (shareholder refresh).</summary>
     public bool Offline { get; set; }
 
-    /// <summary>Run the Iran-time collection schedule in this app (off by default: the desktop is a replica).</summary>
-    public bool Collect { get; set; }
+    /// <summary>
+    /// Download market data in the background (Local mode): the Iran-time collection schedule while the app is open,
+    /// plus a catch-up of what was missed while it was closed. Replaces the old opt-in "Collect" key, which is ignored.
+    /// </summary>
+    public bool AutoDownload { get; set; } = true;
 
     public double WindowWidth { get; set; } = 1440;
 
@@ -45,6 +48,10 @@ public sealed class AppSettings
 
     [JsonIgnore]
     public bool IsPersian => Language == "fa";
+
+    /// <summary>The in-process scheduler runs: background download is on and the app reads its own store.</summary>
+    [JsonIgnore]
+    public bool DownloadsInBackground => AutoDownload && Mode == "Local";
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }

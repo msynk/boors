@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace Boors.Desktop.ViewModels;
 
 /// <summary>
-/// Data health and operations: dataset freshness, last runs, source reachability, the job queue with live progress,
-/// buttons that queue each job and the "sync from node" form. Local mode listens to the in-process queue; remote mode
-/// polls the node while the page is open.
+/// Data health: dataset freshness, last runs, source reachability, a one-line summary of data collection (the job
+/// monitor has the rest) and the "sync from node" form. Local mode listens to the in-process queue; remote mode polls
+/// the node while the page is open.
 /// </summary>
 public sealed partial class HealthViewModel : PageViewModel
 {
@@ -55,8 +55,13 @@ public sealed partial class HealthViewModel : PageViewModel
     [ObservableProperty]
     public partial bool Healthy { get; set; }
 
-    /// <summary>The job buttons (MarketJobs.Names, in the boilerplate's order, plus reload).</summary>
-    public static IReadOnlyList<Choice> JobChoices => [.. MarketJobs.Names.Select(j => new Choice(j, JobName(j)))];
+    /// <summary>Whether the schedule runs where the data comes from (this app's background download, or the node).</summary>
+    [ObservableProperty]
+    public partial bool Scheduled { get; set; }
+
+    /// <summary>"Background download on · Running: End of day · 3 waiting".</summary>
+    [ObservableProperty]
+    public partial string CollectionText { get; set; } = string.Empty;
 
     public bool IsLocal => settings.Current.Mode != "Remote";
 
@@ -65,24 +70,12 @@ public sealed partial class HealthViewModel : PageViewModel
         var healthTask = Api.GetHealthAsync(ct);
         var jobsTask = Api.GetJobsAsync(ct);
         Health = await healthTask;
-        SetJobs((await jobsTask).Entries);
+        var jobs = await jobsTask;
+        Scheduled = jobs.Scheduled;
+        SetJobs(jobs.Entries);
         HasData = true;
         Refresh();
     }, "Data health");
-
-    public async Task RunJobAsync(string job)
-    {
-        try
-        {
-            var id = await Api.RunJobAsync(job, CancellationToken.None);
-            Notice = Loc.F("Queued {0} (#{1})", JobName(job), id);
-            await RefreshJobsAsync();
-        }
-        catch (Exception e)
-        {
-            Notice = Describe(e);
-        }
-    }
 
     public async Task PullAsync()
     {
@@ -98,8 +91,6 @@ public sealed partial class HealthViewModel : PageViewModel
             Notice = Describe(e);
         }
     }
-
-    public bool Cancel(string id) => IsLocal && queue.Cancel(id);
 
     public async Task RefreshJobsAsync()
     {
@@ -118,13 +109,18 @@ public sealed partial class HealthViewModel : PageViewModel
         if (Health is not { } h)
             return;
         Healthy = h.Healthy;
-        StatusText = $"{Loc.T("Expected session")} {Fmt.Date(h.ExpectedSession)} · {Loc.T("Node")} {h.Node} · {Fmt.DateTime(h.GeneratedAt)}";
+        StatusText = $"{Loc.T("Expected session")} {Fmt.Date(h.ExpectedSession)} · {Loc.T("Node")} {h.Node} · {Fmt.DateTime(h.GeneratedAt)} · {Loc.T(Scheduled ? "Background download on" : "Background download off")}";
     }
 
     private void SetJobs(IReadOnlyList<JobInfoDto> entries)
     {
         Jobs = entries;
         Running = entries.FirstOrDefault(e => e.State == "running");
+        var waiting = entries.Count(e => e.State == "queued");
+        CollectionText = string.Join(" · ",
+            IsLocal ? Loc.T(Scheduled ? "Background download on" : "Background download off") : Loc.T("Jobs run on the node"),
+            Running is { } running ? Loc.F("Running: {0}", JobName(running.Job)) : Loc.T("Idle"),
+            Loc.F("{0} waiting", Fmt.Number(waiting)));
     }
 
     // Queue events arrive on pool threads, many per second during a backfill: coalesce to one UI refresh at a time.
@@ -148,6 +144,7 @@ public sealed partial class HealthViewModel : PageViewModel
         "indices" => Loc.T("Indices"),
         "backfill" => Loc.T("History backfill"),
         "eod" => Loc.T("End of day"),
+        "repair" => Loc.T("Missed sessions"),
         "funds" => Loc.T("Funds"),
         "macro" => Loc.T("Dollar and gold"),
         "codal" => Loc.T("Codal letters"),
@@ -168,6 +165,7 @@ public sealed partial class HealthViewModel : PageViewModel
         "ok" => Loc.T("OK"),
         "partial" => Loc.T("Partial"),
         "skipped" => Loc.T("Skipped"),
+        "interrupted" => Loc.T("Interrupted"),
         "Ok" => Loc.T("OK"),
         "Stale" => Loc.T("Stale"),
         "Empty" => Loc.T("Empty"),

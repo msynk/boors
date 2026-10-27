@@ -16,6 +16,7 @@ the source sent, but the files were re-serialized compactly, so number spelling 
 | `tsetmc/index-b2-tedpix.json` | first 3, last 3, and the two closure windows above |
 | `tsetmc/static-data.json` | all 9 PaperType rows and the first 5 IndustrialGroup rows |
 | `tsetmc/market-watch-sample.json` | first 3 rows of the shares market watch plus the فولاد row |
+| `tsetmc/instruments-history-in-day-sample.json` | `GetInstrmentsHistoryInDay/20261021`, captured 2026-10-27 with curl (not through the raw cache): first 3 rows plus the فولاد row of 2,216 |
 | `codal/search-folad.json` | first 5 letters |
 | everything else | complete |
 

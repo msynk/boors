@@ -38,6 +38,16 @@ public static partial class TsetmcParser
             .ToList();
     }
 
+    /// <summary>Bars of every instrument that traded on <paramref name="date"/> (GetInstrmentsHistoryInDay).</summary>
+    public static IReadOnlyList<DailyBar> ParseInstrumentsHistoryInDay(ReadOnlySpan<byte> json, DateOnly date)
+    {
+        var envelope = Deserialize(json, TsetmcJsonContext.Default.InstrumentsHistoryInDayEnvelope);
+        return (envelope?.ClosingPriceDailyHistoryWithInstDetails ?? [])
+            .Where(d => d.InsCode is > 0)
+            .Select(d => ToDailyBar(d, d.InsCode!.Value, date))
+            .ToList();
+    }
+
     public static ClosingPriceSnapshot ParseClosingPriceInfo(ReadOnlySpan<byte> json, long insCode)
     {
         var dto = Deserialize(json, TsetmcJsonContext.Default.ClosingPriceInfoEnvelope)?.ClosingPriceInfo
@@ -279,10 +289,10 @@ public static partial class TsetmcParser
         return new MarketWatchSnapshot(rows);
     }
 
-    private static DailyBar ToDailyBar(ClosingPriceDto d, long insCode) => new()
+    private static DailyBar ToDailyBar(ClosingPriceDto d, long insCode, DateOnly? date = null) => new()
     {
         InsCode = insCode,
-        Date = DEven.ToDate(d.DEven),
+        Date = date ?? DEven.ToDate(d.DEven),
         Open = d.PriceFirst,
         High = d.PriceMax,
         Low = d.PriceMin,

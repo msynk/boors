@@ -18,25 +18,9 @@ public sealed partial class HealthPage : Page, IReloadable
     {
         ViewModel = App.Get<HealthViewModel>();
         InitializeComponent();
-        JobButtons.ItemsSource = HealthViewModel.JobChoices;
-        JobsHint.Text = ViewModel.IsLocal
-            ? Loc.T("Jobs run one at a time in this app (the store has a single writer) and call the data sources directly.")
-            : Loc.T("Jobs run on the node; this app only queues them.");
         if (Loc.IsPersian)
             SincePicker.CalendarIdentifier = Windows.Globalization.CalendarIdentifiers.Persian;
 
-        JobsTable.EmptyText = Loc.T("No jobs since the app started.");
-        JobsTable.Columns =
-        [
-            Col.Of<JobInfoDto>(Loc.T("Job"), 150, j => HealthViewModel.JobName(j.Job), sort: j => j.Job),
-            Col.Of<JobInfoDto>(Loc.T("Status"), 120, _ => string.Empty, sort: j => j.State, tag: j => Status(j.State)),
-            Col.Of<JobInfoDto>(Loc.T("Trigger"), 90, j => Trigger(j.Trigger), sort: j => j.Trigger),
-            Col.Of<JobInfoDto>(Loc.T("Queued"), 140, j => Fmt.DateTime(j.EnqueuedAt), sort: j => j.EnqueuedAt),
-            Col.Of<JobInfoDto>(Loc.T("Duration"), 90, j => j.StartedAt is { } s ? Fmt.Duration((j.FinishedAt ?? DateTimeOffset.UtcNow) - s) : Fmt.Dash, numeric: true),
-            Col.Of<JobInfoDto>(Loc.T("Items"), 80, j => Fmt.Number(j.Items), sort: j => j.Items, numeric: true),
-            Col.Of<JobInfoDto>(Loc.T("Failures"), 72, j => Fmt.Number(j.Failures), sort: j => j.Failures, numeric: true),
-            Col.Of<JobInfoDto>(Loc.T("Message"), 420, j => j.Message ?? j.Progress ?? string.Empty, fill: true),
-        ];
         DatasetsTable.Columns =
         [
             Col.Of<DatasetHealthDto>(Loc.T("Dataset"), 170, d => d.Dataset, sort: d => d.Dataset, fill: true),
@@ -97,14 +81,6 @@ public sealed partial class HealthPage : Page, IReloadable
         return ($"{icon} {HealthViewModel.StateName(status)}", tone);
     }
 
-    private static string Trigger(string trigger) => trigger switch
-    {
-        "manual" => Loc.T("Manual"),
-        "schedule" => Loc.T("Schedule"),
-        "sync" => Loc.T("Sync"),
-        _ => trigger,
-    };
-
     private void OnViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Show();
 
     private void Show()
@@ -113,7 +89,6 @@ public sealed partial class HealthPage : Page, IReloadable
         DatasetsTable.Items = health?.Datasets;
         RunsTable.Items = health?.Runs;
         SourcesTable.Items = health?.Sources;
-        JobsTable.Items = ViewModel.Jobs;
         ProbeText.Text = health?.LastProbeAt is { } probe ? $"{Loc.T("Last probe")}: {Fmt.DateTime(probe)}" : Loc.T("Not probed yet");
 
         if (health is not null)
@@ -124,29 +99,9 @@ public sealed partial class HealthPage : Page, IReloadable
             OverallText.Foreground = Palette.Brush(tone);
             OverallText.Text = health.Healthy ? $"✓ {Loc.T("Healthy")}" : $"⚠ {Loc.T("Needs attention")}";
         }
-
-        var running = ViewModel.Running;
-        RunningCard.Visibility = Ui.Show(running is not null);
-        if (running is not null)
-        {
-            RunningTitle.Text = $"{HealthViewModel.JobName(running.Job)} · {HealthViewModel.StateName(running.State)} · {(running.StartedAt is { } s ? Fmt.Duration(DateTimeOffset.UtcNow - s) : string.Empty)}";
-            RunningProgress.Text = running.Progress ?? Loc.T("Working…");
-            CancelButton.Tag = running.Id;
-            CancelButton.Visibility = Ui.Show(ViewModel.IsLocal);
-        }
     }
 
-    private async void OnRunJob(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string job })
-            await ViewModel.RunJobAsync(job);
-    }
-
-    private void OnCancel(object sender, RoutedEventArgs e)
-    {
-        if (CancelButton.Tag is string id)
-            ViewModel.Cancel(id);
-    }
+    private void OnOpenJobs(object sender, RoutedEventArgs e) => App.Get<Navigator>().Navigate(Navigator.Jobs);
 
     private async void OnPull(object sender, RoutedEventArgs e)
     {

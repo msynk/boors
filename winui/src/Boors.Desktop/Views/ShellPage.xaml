@@ -101,6 +101,16 @@
                         <FontIcon Glyph="&#xE95E;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="{l:L K='Data collection'}" Tag="jobs">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE81C;" />
+                    </NavigationViewItem.Icon>
+                    <NavigationViewItem.InfoBadge>
+                        <!-- Jobs that failed since the page was last open -->
+                        <InfoBadge Value="{x:Bind ViewModel.JobsBadge, Mode=OneWay}" Visibility="{x:Bind vm:Ui.Show(ViewModel.HasJobsBadge), Mode=OneWay}"
+                                   AutomationProperties.Name="{x:Bind ViewModel.JobsBadgeText, Mode=OneWay}" ToolTipService.ToolTip="{x:Bind ViewModel.JobsBadgeText, Mode=OneWay}" />
+                    </NavigationViewItem.InfoBadge>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem Content="{l:L K='Settings'}" Tag="settings">

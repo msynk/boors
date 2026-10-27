@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Boors.Desktop.ViewModels;
 
-/// <summary>Appearance, data source and data folder. Appearance applies at once; the data folder needs a restart.</summary>
+/// <summary>Appearance, data source, data folder and background download. Only the data folder and node name need a restart.</summary>
 public sealed partial class SettingsViewModel(SettingsService settings) : ObservableObject
 {
     public AppSettings Current => settings.Current;
@@ -41,11 +41,7 @@ public sealed partial class SettingsViewModel(SettingsService settings) : Observ
         RestartPending = true;
     }
 
-    public void SetCollect(bool collect)
-    {
-        Set(s => s.Collect = collect);
-        RestartPending = true;
-    }
+    public void SetAutoDownload(bool on) => Set(s => s.AutoDownload = on);
 
     public void SetNodeName(string? name)
     {

@@ -41,6 +41,13 @@ public sealed class TsetmcEndpoints(string baseUrl = TsetmcEndpoints.DefaultBase
     public RawRequest ClosingPriceDailyList(long insCode, int count = 0) =>
         new(Source, "ClosingPrice/GetClosingPriceDailyList", $"{baseUrl}ClosingPrice/GetClosingPriceDailyList/{Inv(insCode)}/{Inv(count)}", $"insCode={Inv(insCode)}&n={Inv(count)}");
 
+    /// <summary>
+    /// The daily bar of every instrument that traded on <paramref name="date"/> (about 2,200 rows, ~170 KB): one call per
+    /// past session instead of one per instrument. Rows carry dEven = 0; the date is the request's.
+    /// </summary>
+    public RawRequest InstrumentsHistoryInDay(DateOnly date) =>
+        new(Source, "ClosingPrice/GetInstrmentsHistoryInDay", $"{baseUrl}ClosingPrice/GetInstrmentsHistoryInDay/{Inv(DEven.FromDate(date))}", $"date={Inv(DEven.FromDate(date))}");
+
     public RawRequest PriceAdjustList(long insCode) => ForInstrument("ClosingPrice/GetPriceAdjustList", insCode);
 
     public RawRequest ClientTypeHistory(long insCode) => ForInstrument("ClientType/GetClientTypeHistory", insCode);

@@ -25,7 +25,7 @@ public sealed partial class SettingsPage : Page
         NodeUrlBox.Text = s.NodeUrl;
         TokenBox.Password = s.OperatorToken ?? string.Empty;
         OfflineSwitch.IsOn = s.Offline;
-        CollectSwitch.IsOn = s.Collect;
+        AutoDownloadSwitch.IsOn = s.AutoDownload;
         NodeNameBox.Text = s.NodeName ?? string.Empty;
         NodeNameBox.PlaceholderText = ViewModel.EffectiveNode;
         DataRootBox.Text = s.DataRoot ?? string.Empty;
@@ -114,10 +114,10 @@ public sealed partial class SettingsPage : Page
 
     private void OnOffline(object sender, RoutedEventArgs e) => Set(s => s.Offline = OfflineSwitch.IsOn);
 
-    private void OnCollect(object sender, RoutedEventArgs e)
+    private void OnAutoDownload(object sender, RoutedEventArgs e)
     {
         if (!loading)
-            ViewModel.SetCollect(CollectSwitch.IsOn);
+            ViewModel.SetAutoDownload(AutoDownloadSwitch.IsOn);
     }
 
     private void OnNodeName(object sender, RoutedEventArgs e)

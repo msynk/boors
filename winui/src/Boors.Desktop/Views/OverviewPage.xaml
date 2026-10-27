@@ -38,10 +38,9 @@
             <Border Style="{StaticResource CardStyle}" Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}" Padding="24">
                 <StackPanel Spacing="12">
                     <TextBlock Text="{l:L K='No market data yet'}" Style="{StaticResource SubtitleTextBlockStyle}" />
-                    <TextBlock Style="{StaticResource BodyTextBlockStyle}" TextWrapping="WrapWholeWords"
-                               Text="{l:L K='This computer has no market store yet. Pull the raw cache from a Boors node, or run the collection jobs (they call TSETMC, Codal and tgju directly).'}" />
+                    <TextBlock Style="{StaticResource BodyTextBlockStyle}" TextWrapping="WrapWholeWords" Text="{x:Bind ViewModel.EmptyText, Mode=OneWay}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Style="{StaticResource AccentButtonStyle}" Click="OnOpenHealth" Content="{l:L K='Sync from node'}" />
+                        <Button Style="{StaticResource AccentButtonStyle}" Click="OnOpenHealth" Content="{x:Bind ViewModel.EmptyAction, Mode=OneWay}" />
                         <Button Click="OnOpenSettings" Content="{l:L K='Choose a data folder'}" />
                     </StackPanel>
                 </StackPanel>

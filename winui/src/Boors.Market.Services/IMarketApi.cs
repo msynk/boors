@@ -67,6 +67,19 @@ public interface IMarketApi
     /// <summary>GET api/v1/MarketData/GetJobs</summary>
     Task<JobQueueDto> GetJobsAsync(CancellationToken cancellationToken);
 
+    /// <summary>GET api/v1/MarketData/GetJob/{id} — a queue entry with its log and traffic; 404 when the queue no longer holds it.</summary>
+    Task<JobDetailDto> GetJobAsync(string id, CancellationToken cancellationToken);
+
+    /// <summary>POST api/v1/MarketData/CancelJob/{id} — cancels a queued or running job; false when it already finished.</summary>
+    Task<bool> CancelJobAsync(string id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// GET api/v1/MarketData/GetRuns?job=&amp;since=&amp;take= — the run history, newest first: runs started on or after
+    /// <paramref name="since"/> (yyyy-MM-dd, default 30 days ago), optionally of one job, at most <paramref name="take"/>
+    /// (default 5,000, 1–50,000).
+    /// </summary>
+    Task<List<JobRunDto>> GetRunsAsync(string? job, string? since, int take, CancellationToken cancellationToken);
+
     /// <summary>POST api/v1/Sync/Pull — queues "download another node's bundle, import, reload"; returns the job id.</summary>
     Task<string> PullFromNodeAsync(SyncPullRequestDto request, CancellationToken cancellationToken);
 }

@@ -45,6 +45,9 @@ public sealed class TsetmcClient(HttpClient http, IRawCache cache, TimeProvider 
     public async Task<IReadOnlyList<DailyBar>> GetDailyHistoryAsync(long insCode, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
         TsetmcParser.ParseDailyHistory(await GetBodyAsync(Endpoints.ClosingPriceDailyList(insCode), policy, cancellationToken), insCode);
 
+    public async Task<IReadOnlyList<DailyBar>> GetInstrumentsHistoryInDayAsync(DateOnly date, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
+        TsetmcParser.ParseInstrumentsHistoryInDay(await GetBodyAsync(Endpoints.InstrumentsHistoryInDay(date), policy, cancellationToken), date);
+
     public async Task<ClosingPriceSnapshot> GetClosingPriceInfoAsync(long insCode, CachePolicy policy = CachePolicy.Network, CancellationToken cancellationToken = default) =>
         TsetmcParser.ParseClosingPriceInfo(await GetBodyAsync(Endpoints.ClosingPriceInfo(insCode), policy, cancellationToken), insCode);
 

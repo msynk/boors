@@ -45,6 +45,8 @@ public static class Ui
 
     public static Visibility ShowText(string? text) => string.IsNullOrWhiteSpace(text) ? Visibility.Collapsed : Visibility.Visible;
 
+    public static Visibility ShowValue(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
+
     public static GridLength Star(double value) => new(Math.Max(0, value), GridUnitType.Star);
 
     public static bool Not(bool value) => !value;

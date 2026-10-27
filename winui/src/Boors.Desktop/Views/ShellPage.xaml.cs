@@ -25,10 +25,12 @@ public sealed partial class ShellPage : Page
         LanguageButtonText.Text = settings.Current.IsPersian ? "EN" : "فا";
         navigator.Navigated += OnNavigated;
         ViewModel.SettingsRequested += OnSettingsRequested;
+        ViewModel.DataChanged += OnDataChanged;
         Unloaded += (_, _) =>
         {
             navigator.Navigated -= OnNavigated;
             ViewModel.SettingsRequested -= OnSettingsRequested;
+            ViewModel.DataChanged -= OnDataChanged;
         };
         ViewModel.UpdateJobIndicator();
     }
@@ -58,6 +60,13 @@ public sealed partial class ShellPage : Page
     {
         if (ContentFrame.Content is IReloadable page)
             page.Reload();
+    }
+
+    // Data health reloads itself when a job finishes; every other page shows the new data now.
+    private void OnDataChanged(object? sender, EventArgs e)
+    {
+        if (navigator.CurrentKey != Navigator.Health)
+            ReloadCurrent();
     }
 
     private void OnNavigated(object? sender, string key)

@@ -13,9 +13,13 @@ public sealed record PaletteEntry(string Title, string Subtitle, string Glyph, F
     public override string ToString() => Title;
 }
 
-/// <summary>Title-bar search, the command palette (Ctrl+K) and the job indicator.</summary>
+/// <summary>Title-bar search, the command palette (Ctrl+K), the job indicator and the new-data signal for pages.</summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
+    // Jobs whose new rows change what the pages show (prices, indices, series). Codal and messages change only the
+    // symbol feeds, every 15–30 minutes; reloading the open page for them would only disturb the user.
+    private static readonly HashSet<string> PageDataJobs = ["eod", "repair", "backfill", "indices", "instruments", "macro", "funds", "reload", "sync"];
+
     private readonly IMarketApi api;
     private readonly Navigator navigator;
     private readonly SettingsService settings;
@@ -24,6 +28,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly ILogger<ShellViewModel> logger;
     private CancellationTokenSource? searching;
     private int jobRefreshQueued;
+    private DateTimeOffset lastFinishedSeen = DateTimeOffset.MinValue;
 
     public ShellViewModel(IMarketApi api, Navigator navigator, SettingsService settings, MarketJobQueue queue, UiDispatcher dispatcher, ILogger<ShellViewModel> logger)
     {
@@ -52,8 +57,27 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty]
     public partial bool JobRunning { get; set; }
 
+    /// <summary>Jobs that failed (or finished with failed items) since the job monitor was last open.</summary>
+    [ObservableProperty]
+    public partial int JobsBadge { get; set; }
+
+    public bool HasJobsBadge => JobsBadge > 0;
+
+    public string JobsBadgeText => Loc.F("{0} jobs with failures since you last looked", Fmt.Number(JobsBadge));
+
+    public void ClearJobsBadge() => JobsBadge = 0;
+
+    partial void OnJobsBadgeChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasJobsBadge));
+        OnPropertyChanged(nameof(JobsBadgeText));
+    }
+
     /// <summary>Theme/language toggles from the palette; the shell applies them.</summary>
     public event EventHandler<Action<AppSettings>>? SettingsRequested;
+
+    /// <summary>A job finished with new data for the pages (on the UI thread); the shell reloads the open page.</summary>
+    public event EventHandler? DataChanged;
 
     /// <summary>Symbol suggestions for the title-bar search (debounced, symbol first, then name).</summary>
     public async Task SuggestAsync(string text)
@@ -154,20 +178,21 @@ public sealed partial class ShellViewModel : ObservableObject
         yield return Go(Loc.T("Market watch"), Navigator.Watch, "");
         yield return Go(Loc.T("Screens"), Navigator.Screens, "");
         yield return Go(Loc.T("Data health"), Navigator.Health, "");
+        yield return Go(Loc.T("Data collection"), Navigator.Jobs, "");
         yield return Go(Loc.T("Settings"), Navigator.Settings, "");
         yield return new(Loc.T("Toggle dark / light theme"), Loc.T("Appearance"), "", () => Apply(s => s.Theme = s.Theme == "Light" ? "Dark" : "Light"));
         yield return new(Loc.T("Switch language (فارسی / English)"), Loc.T("Appearance"), "", () => Apply(s => s.Language = s.Language == "fa" ? "en" : "fa"));
         yield return new(Loc.T("Toggle Persian / Latin digits"), Loc.T("Appearance"), "", () => Apply(s => s.Digits = s.Digits == "Persian" ? "Latin" : "Persian"));
         yield return new(Loc.T("Toggle colour-blind safe colours"), Loc.T("Appearance"), "", () => Apply(s => s.ColorPreset = s.ColorPreset == "Iranian" ? "ColorBlind" : "Iranian"));
         yield return new(Loc.T("Toggle Lite / Pro density"), Loc.T("Appearance"), "", () => Apply(s => s.Density = s.Density == "Pro" ? "Lite" : "Pro"));
-        foreach (var job in new[] { "eod", "instruments", "macro", "codal", "messages", "reload" })
+        foreach (var job in new[] { "eod", "repair", "instruments", "macro", "codal", "messages", "reload" })
         {
             yield return new(Loc.F("Run job: {0}", HealthViewModel.JobName(job)), Loc.T("Operations"), "", async () =>
             {
                 try
                 {
                     await api.RunJobAsync(job, CancellationToken.None);
-                    navigator.Navigate(Navigator.Health);
+                    navigator.Navigate(Navigator.Jobs);
                 }
                 catch (Exception e)
                 {
@@ -211,5 +236,14 @@ public sealed partial class ShellViewModel : ObservableObject
         JobRunning = running is not null;
         JobText = running is null ? null
             : string.IsNullOrWhiteSpace(running.Progress) ? HealthViewModel.JobName(running.Job) : $"{HealthViewModel.JobName(running.Job)}: {running.Progress}";
+
+        var finished = queue.Snapshot().Where(j => j.FinishedAt > lastFinishedSeen).ToList();
+        if (finished.Count == 0)
+            return;
+        lastFinishedSeen = finished.Max(j => j.FinishedAt!.Value);
+        if (navigator.CurrentKey != Navigator.Jobs)
+            JobsBadge += finished.Count(j => j.State == "failed" || j.Failures > 0);
+        if (finished.Any(j => j.State == "succeeded" && j.Items > 0 && PageDataJobs.Contains(j.Job)))
+            DataChanged?.Invoke(this, EventArgs.Empty);
     }
 }
